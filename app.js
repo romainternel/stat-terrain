@@ -1235,8 +1235,9 @@ function renderMatch(){
       </div>
     </div>`;
 
-  const actBtn=(k,sm=false)=>{const a=ACTIONS[k];const sel=S.selectedAction===k;
-    return `<button class="act-v ${sel?"selected":""} ${sm?"act-v-sm":""}" data-act="${k}" style="border-color:${sel?a.color:"var(--border)"};">
+  const actBtn=(k,size="md")=>{const a=ACTIONS[k];const sel=S.selectedAction===k;
+    const sizeClass=size==="xl"?"act-v-xl":size==="sm"?"act-v-sm":"";
+    return `<button class="act-v ${sizeClass} ${sel?"selected":""}" data-act="${k}">
       <span class="av-icon">${a.icon}</span><span class="av-label" style="color:${a.color}">${a.label}</span>
     </button>`;};
 
@@ -1263,7 +1264,7 @@ function renderMatch(){
   </div>`:"";
 
   return `
-  <div class="match-3col">
+  <div class="match-3col poss-${S.possession}">
     <div class="m3-left">
       ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)")}
       <div class="m3-timer">
@@ -1288,13 +1289,15 @@ function renderMatch(){
       </div>
     </div>
     <div class="m3-mid">
-      ${S.penMode?`<div style="background:rgba(255,196,0,.15);border:1.5px solid var(--yellow);border-radius:6px;padding:3px 5px;text-align:center;font-size:9px;font-weight:700;color:var(--yellow);">🎯 PEN</div>`:""}
-      ${actBtn("GOAL")}
+      ${S.penMode?`<div style="background:rgba(255,196,0,.12);border:1.5px solid var(--yellow);border-radius:var(--r1);padding:4px 6px;text-align:center;font-size:9px;font-weight:700;color:var(--yellow);letter-spacing:.06em;">🎯 MODE PENALTY</div>`:""}
+      ${actBtn("GOAL","xl")}
       ${actBtn("SAVE")}
       ${actBtn("OFF")}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TURNOVER",true)}${actBtn("PEN_OBT",true)}</div>
-      ${actBtn("FREEKICK")}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TWO_MIN",true)}${actBtn("RED",true)}</div>
+      <div class="act-sep"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TURNOVER","sm")}${actBtn("PEN_OBT","sm")}</div>
+      ${actBtn("FREEKICK","sm")}
+      <div class="act-sep"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TWO_MIN","sm")}${actBtn("RED","sm")}</div>
       <div style="flex:1;min-height:4px;"></div>
       ${lastEvHtml}
       <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;padding-top:4px;">
