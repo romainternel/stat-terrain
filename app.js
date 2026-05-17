@@ -87,6 +87,7 @@ function freshState(){
     pdSelect:false, // true when selecting PD player for last event
     penResultSelect:null, // kept for compat (unused)
     penMode:false, // true after PO recorded — next GOAL/SAVE/OFF → PEN_*
+    trackGK:true, // false = skip map/zones/gkId (simplified mode)
     feedOpen:false, // side panel for match feed
     gkFilter:{home:"all",away:"all"}, // "all" or specific gkId
     gkShotFilter:{goals:true,saves:true,offs:true}, // toggle shot types on maps
@@ -348,6 +349,10 @@ function clickActionPlayer(playerId){
       validateAndClose();
       S.penMode=true;
       R(); return;
+    }
+    // Simplified mode (no GK tracking): instant validate, no map/zone
+    if(!S.trackGK){
+      validateAndClose(); R(); return;
     }
     // Non-mapped actions (2min, red): auto-validate
     if(!act.needsMap && !act.isGoal && !act.isSave && !act.isOff){
@@ -1012,7 +1017,11 @@ function renderSetup(){
     ${renderTeamSetup("home")}
     ${renderTeamSetup("away")}
   </div>
-  <div style="text-align:center;margin-top:12px;">
+  <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px;padding:10px 16px;border-radius:10px;background:rgba(123,167,194,.04);border:1px solid rgba(123,167,194,.12);">
+    <span style="font-size:13px;color:var(--t2);font-weight:600;">🧤 Suivi gardien & zones de tir</span>
+    <button onclick="S.trackGK=!S.trackGK;R();" style="padding:4px 14px;border-radius:20px;border:1.5px solid ${S.trackGK?'var(--fenix-sky)':'var(--border)'};background:${S.trackGK?'rgba(123,167,194,.15)':'transparent'};color:${S.trackGK?'var(--fenix-sky)':'var(--t3)'};font-size:13px;font-weight:700;">${S.trackGK?'✓ Activé':'✗ Désactivé'}</button>
+  </div>
+  <div style="text-align:center;margin-top:10px;">
     <button class="btn btn-g" style="padding:12px 32px;font-size:14px;border-color:var(--fenix-sky);color:var(--fenix-sky);background:rgba(123,167,194,.08);" data-v="match">▶ Lancer le match</button>
   </div>`;
 }
@@ -1119,7 +1128,7 @@ function renderMatchPanel(){
           }).join("")}
         </div>
       </div>
-      ${!act||act.needsMap?`<div class="ap-right" style="display:flex;flex-direction:row;gap:6px;">
+      ${(!act||act.needsMap) && S.trackGK?`<div class="ap-right" style="display:flex;flex-direction:row;gap:6px;">
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
         ${!act||(act.isGoal||act.isSave||act.isOff)?`<div class="goal-zone-grid">
           ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap&&ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
