@@ -1215,114 +1215,134 @@ function renderMatch(){
   const aSv=aGk.saves+aGk.penSaves, aSh=aGk.saves+aGk.goals+aGk.penSaves+aGk.penGoals+(aGk.penOffs||0);
   const hAct=S.possession==="home", aAct=S.possession==="away";
 
-  const teamBlock=(side,score,mt1,mt2,gbs,gkId,sv,sh2,active,accent)=>`
-    <div class="m3-team ${active?"m3-poss-"+side:""}" data-poss="${side}">
-      <div class="m3t-name" style="color:${active?accent:"var(--t2)"};">${S[side].name}</div>
-      <div class="m3t-score mono" style="color:${active?accent:"var(--t2)"};">${score}</div>
-      <div class="m3t-detail mono">${mt1}·${mt2}</div>
-      <div class="m3t-gk">
-        ${gbs.length>0?`<select data-gk-sel="${side}" style="background:var(--bg3);border:1px solid rgba(123,167,194,.2);border-radius:4px;color:var(--blue);font-size:10px;padding:2px 3px;max-width:95px;">
-          <option value="">🧤--</option>
-          ${gbs.map(p=>`<option value="${p.id}" ${gkId===p.id?"selected":""}>${p.number?"🧤#"+p.number+" "+p.name:"🧤"+p.name}</option>`).join("")}
-        </select>`:`<span style="font-size:10px;color:var(--blue);">🧤${gkName(side)}</span>`}
-        ${side==="home"?`<button id="gk-timeline-btn" style="background:rgba(123,167,194,.15);border:1px solid rgba(123,167,194,.3);border-radius:4px;padding:1px 4px;font-size:9px;color:var(--fenix-sky);">📊</button>`:""}
-        <span class="mono" style="font-size:10px;color:var(--blue);font-weight:700;">${sv}/${sh2}</span>
+  const teamBlock=(side,score,mt1,mt2,gbs,gkId,sv,sh2,active,accent,h2,r)=>`
+    <div class="ml-team ${active?"ml-team-active":""} ml-team-${side}" data-poss="${side}">
+      <div class="mlt-top">
+        <div>
+          <div class="mlt-name" style="color:${active?accent:"var(--t2)"};">${S[side].name}</div>
+          <div class="mlt-detail">${mt1} · ${mt2}</div>
+        </div>
+        <div class="mlt-score mono" style="color:${active?accent:"var(--t3)"};">${score}</div>
       </div>
-      <div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap;">
-        <button onclick="recordTM('${side}')" style="padding:2px 5px;border-radius:4px;border:1px solid var(--yellow);background:rgba(240,199,94,.1);color:var(--yellow);font-size:9px;font-weight:700;">⏸TM</button>
-        <button class="sb-badge" data-badge="${side}|TWO_MIN" style="font-size:10px;padding:2px 5px;background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.4);color:#FF6B6B;">⏱${side==="home"?h2m:a2m}</button>
-        <button class="sb-badge" data-badge="${side}|RED" style="font-size:10px;padding:2px 5px;background:rgba(232,70,90,.15);border:1px solid rgba(232,70,90,.4);color:var(--red);">🟥${side==="home"?hRed:aRed}</button>
+      <div class="mlt-gk">
+        ${gbs.length>0?`<select data-gk-sel="${side}" class="mlt-gk-sel">
+          <option value="">🧤 Gardien --</option>
+          ${gbs.map(p=>`<option value="${p.id}" ${gkId===p.id?"selected":""}>${p.number?"#"+p.number+" ":""}${p.name}</option>`).join("")}
+        </select>`:`<span class="mlt-gk-name">🧤 ${gkName(side)}</span>`}
+        <span class="mlt-gk-stat mono">${sv}/${sh2}</span>
+        ${side==="home"?`<button id="gk-timeline-btn" class="mlt-gk-tl">📊</button>`:""}
+      </div>
+      <div class="mlt-ctrl">
+        <button onclick="recordTM('${side}')" class="mlt-btn-tm">⏸ TM</button>
+        <button class="mlt-btn-sanc sb-badge" data-badge="${side}|TWO_MIN">⏱ ${h2}</button>
+        <button class="mlt-btn-sanc mlt-btn-red sb-badge" data-badge="${side}|RED">🟥 ${r}</button>
       </div>
     </div>`;
 
-  const actBtn=(k,size="md")=>{const a=ACTIONS[k];const sel=S.selectedAction===k;
-    const sizeClass=size==="xl"?"act-v-xl":size==="sm"?"act-v-sm":"";
-    return `<button class="act-v ${sizeClass} ${sel?"selected":""}" data-act="${k}">
-      <span class="av-icon">${a.icon}</span><span class="av-label" style="color:${a.color}">${a.label}</span>
-    </button>`;};
+  const actBtn=(k,size="md")=>{
+    const a=ACTIONS[k]; const sel=S.selectedAction===k;
+    const sizeClass=size==="xl"?"act-h-xl":size==="sm"?"act-h-sm":"";
+    return `<button class="act-h ${sizeClass} ${sel?"selected":""}" data-act="${k}">
+      <span class="ah-icon">${a.icon}</span>
+      <span class="ah-label" style="color:${a.color}">${a.label}</span>
+    </button>`;
+  };
 
   let pdBtnHtml="";
   if(S.events.length>0&&!S.actionPanel){
     const ev=S.events[0]; const hasPd=!!ev.assistName;
-    pdBtnHtml=`<button id="pd-btn" style="padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;background:${hasPd?"rgba(240,199,94,.15)":"rgba(255,255,255,.06)"};border:1px solid ${hasPd?"rgba(240,199,94,.5)":"rgba(255,255,255,.2)"};color:${hasPd?"var(--yellow)":"#ccc"};">${hasPd?"✓PD":"🎯PD"}</button>`;
+    pdBtnHtml=`<button id="pd-btn" class="ml-ctrl-btn" style="border-color:${hasPd?"var(--yellow)":"var(--border)"};color:${hasPd?"var(--yellow)":"var(--t2)"};">${hasPd?"✓ PD":"🎯 PD"}</button>`;
   }
 
   let lastEvHtml="";
   if(S.events.length>0&&!S.actionPanel){
     const ev=S.events[0]; const a=ACTIONS[ev.type];
     const pLbl=ev.playerNumber?`#${ev.playerNumber} ${ev.playerName||""}`:(ev.playerName||"");
-    lastEvHtml=`<div style="font-size:9px;color:var(--fenix-sky);background:rgba(123,167,194,.1);border-radius:5px;padding:2px 5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.icon} ${pLbl}</div>`;
+    lastEvHtml=`<span style="font-size:10px;color:var(--fenix-sky);background:rgba(95,168,211,.1);border-radius:5px;padding:2px 8px;white-space:nowrap;">${a.icon} ${pLbl}</span>`;
   }
 
   const settingsHtml=S.settingsOpen?`<div class="settings-panel" id="settings-panel">
-    <button class="btn btn-sm btn-g" id="save-match-btn" style="width:100%;margin-bottom:4px;">💾 Sauvegarder</button>
-    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;border-color:var(--fenix-sky);color:var(--fenix-sky);" id="export-match">📤 Exporter</button>
-    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;border-color:var(--yellow);color:var(--yellow);" id="import-match">📥 Importer</button>
-    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;border-color:var(--fenix-sky);color:var(--fenix-sky);" data-v="setup">✏️ Effectifs</button>
-    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;" id="new-btn">🆕 Nouveau</button>
+    <button class="btn btn-sm btn-g" id="save-match-btn" style="width:100%;margin-bottom:5px;">💾 Sauvegarder</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--fenix-sky);color:var(--fenix-sky);" id="export-match">📤 Exporter</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--yellow);color:var(--yellow);" id="import-match">📥 Importer</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--fenix-sky);color:var(--fenix-sky);" data-v="setup">✏️ Effectifs</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:5px;" id="new-btn">🆕 Nouveau match</button>
     <button class="btn btn-sm" style="width:100%;border-color:var(--border);color:var(--t3);" id="close-settings">✕ Fermer</button>
   </div>`:"";
 
   return `
-  <div class="match-3col poss-${S.possession}">
-    <div class="m3-left">
-      ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)")}
-      <div class="m3-timer">
+  <div class="match-layout poss-${S.possession}">
+    <!-- COLONNE GAUCHE: équipes + timer -->
+    <div class="ml-left">
+      ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)",h2m,hRed)}
+      <div class="ml-timer">
         <button class="per-btn" id="per-btn">MT ${S.period}</button>
         <div class="timer-d mono ${S.running?"run":"stop"}" id="tmr">${fmtTime(S.time)}</div>
         <div class="timer-btns">
-          <button class="btn btn-sm ${S.running?"btn-r":"btn-g"}" id="t-toggle">${S.running?"⏸":"▶"}</button>
+          <button class="btn btn-sm ${S.running?"btn-r":"btn-g"}" id="t-toggle" style="flex:1;">${S.running?"⏸ Stop":"▶ Start"}</button>
           <button class="btn btn-sm" id="t-reset">↺</button>
         </div>
       </div>
-      ${teamBlock("away",sa,aMT1,aMT2,awayGbs,S.away.gkId,aSv,aSh,aAct,"var(--red)")}
-      <div class="m3-extra">
-        <div style="font-size:9px;color:var(--t3);text-align:center;margin-bottom:3px;">
+      ${teamBlock("away",sa,aMT1,aMT2,awayGbs,S.away.gkId,aSv,aSh,aAct,"var(--red)",a2m,aRed)}
+      <div class="ml-extra">
+        <div style="font-size:10px;color:var(--t3);text-align:center;margin-bottom:4px;">
           <span id="edit-season" style="cursor:pointer;">${S.season}</span>
-          <span style="margin:0 3px;">·</span>
+          <span style="margin:0 4px;">·</span>
           <span id="edit-journee" style="cursor:pointer;color:var(--yellow);font-weight:700;">${S.journee}</span>
         </div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
-          <span style="font-size:9px;color:var(--t2);">🧤 GB</span>
-          <button onclick="S.trackGK=!S.trackGK;R();" style="padding:1px 6px;border-radius:4px;border:1px solid ${S.trackGK?"var(--fenix-sky)":"var(--border)"};background:${S.trackGK?"rgba(123,167,194,.15)":"transparent"};color:${S.trackGK?"var(--fenix-sky)":"var(--t3)"};font-size:9px;font-weight:700;">${S.trackGK?"✓ ON":"✗ OFF"}</button>
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+          <span style="font-size:10px;color:var(--t2);font-weight:600;">🧤 Suivi GB</span>
+          <button onclick="S.trackGK=!S.trackGK;R();" style="padding:3px 10px;border-radius:6px;border:1.5px solid ${S.trackGK?"var(--fenix-sky)":"var(--border)"};background:${S.trackGK?"rgba(95,168,211,.15)":"transparent"};color:${S.trackGK?"var(--fenix-sky)":"var(--t3)"};font-size:11px;font-weight:700;">${S.trackGK?"✓ ON":"✗ OFF"}</button>
         </div>
       </div>
     </div>
-    <div class="m3-mid">
-      ${S.penMode?`<div style="background:rgba(255,196,0,.12);border:1.5px solid var(--yellow);border-radius:var(--r1);padding:4px 6px;text-align:center;font-size:9px;font-weight:700;color:var(--yellow);letter-spacing:.06em;">🎯 MODE PENALTY</div>`:""}
-      ${actBtn("GOAL","xl")}
-      ${actBtn("SAVE")}
-      ${actBtn("OFF")}
-      <div class="act-sep"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TURNOVER","sm")}${actBtn("PEN_OBT","sm")}</div>
-      ${actBtn("FREEKICK","sm")}
-      <div class="act-sep"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TWO_MIN","sm")}${actBtn("RED","sm")}</div>
-      <div style="flex:1;min-height:4px;"></div>
-      ${lastEvHtml}
-      <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;padding-top:4px;">
-        <button class="btn btn-xs" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡<span class="mono">${S.events.length}</span></button>
-        ${S.events.length>0?`<button class="btn btn-xs" style="border-color:var(--red);color:var(--red);" id="undo-btn">↩</button>`:""}
-        ${pdBtnHtml}
-        <button class="btn btn-xs" id="settings-btn" style="border-color:var(--border);color:var(--t2);">⚙</button>
+
+    <!-- COLONNE DROITE: boutons + terrain -->
+    <div class="ml-right">
+      <!-- Barre d'actions horizontale -->
+      <div class="ml-actions">
+        ${actBtn("GOAL","xl")}
+        ${actBtn("SAVE")}
+        ${actBtn("OFF")}
+        <div class="act-h-sep"></div>
+        ${actBtn("TURNOVER","sm")}
+        ${actBtn("PEN_OBT","sm")}
+        ${actBtn("FREEKICK","sm")}
+        <div class="act-h-sep"></div>
+        <div class="ml-ctrl-group">
+          <button class="ml-ctrl-btn" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡ <span class="mono" style="font-size:15px;font-weight:800;">${S.events.length}</span></button>
+          ${S.events.length>0?`<button class="ml-ctrl-btn" style="border-color:var(--red);color:var(--red);" id="undo-btn">↩</button>`:""}
+          ${pdBtnHtml}
+          <button class="ml-ctrl-btn" id="settings-btn" style="border-color:var(--border);color:var(--t2);">⚙</button>
+        </div>
+      </div>
+
+      <!-- Status: penMode + dernier event -->
+      ${S.penMode||lastEvHtml?`<div class="ml-status">
+        ${S.penMode?`<span style="background:rgba(240,199,94,.12);border:1.5px solid var(--yellow);border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;color:var(--yellow);letter-spacing:.06em;">🎯 MODE PENALTY</span>`:""}
+        ${lastEvHtml}
+      </div>`:""}
+
+      <!-- Terrain -->
+      <div class="ml-court">
+        ${renderMatchPanel()}
       </div>
     </div>
-    <div class="m3-right">
-      ${renderMatchPanel()}
-    </div>
+
     ${settingsHtml}
   </div>
+
   <div class="feed-panel ${S.feedOpen?"open":""}">
     <div class="feed-panel-header">
-      <span style="font-weight:700;color:var(--text);font-size:15px;">⚡ Fil du match (${S.events.length})</span>
-      <div style="display:flex;gap:6px;">
-        ${S.events.length>0?`<button class="btn btn-xs" style="border-color:var(--red);color:var(--red);" id="undo-btn-feed">↩ Annuler</button>`:""}
-        <button class="btn btn-xs" id="close-feed" style="border-color:var(--border);color:var(--t2);">✕</button>
+      <span style="font-weight:700;color:var(--text);font-size:16px;">⚡ Fil du match (${S.events.length})</span>
+      <div style="display:flex;gap:8px;">
+        ${S.events.length>0?`<button class="btn btn-sm" style="border-color:var(--red);color:var(--red);" id="undo-btn-feed">↩ Annuler dernier</button>`:""}
+        <button class="btn btn-sm" id="close-feed" style="border-color:var(--border);color:var(--t2);">✕ Fermer</button>
       </div>
     </div>
-    <div style="padding:6px 12px;font-size:10px;color:var(--t3);border-bottom:1px solid var(--border);">Clique pour modifier</div>
+    <div style="padding:6px 14px;font-size:11px;color:var(--t3);border-bottom:1px solid var(--border);">Clique sur un événement pour le modifier</div>
     <div class="feed-panel-body">
-      ${S.events.length===0?`<div class="empty">Aucun événement</div>`:
+      ${S.events.length===0?`<div class="empty">Aucun événement enregistré</div>`:
         S.events.map((ev,i)=>{
           const a=ACTIONS[ev.type];
           const pLabel=ev.playerNumber?`#${ev.playerNumber}`:(ev.playerName&&ev.playerName!=="?"?ev.playerName:"");
