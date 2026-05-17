@@ -581,6 +581,10 @@ function validateAndClose(){
       goalZone: ap.goalZone||null,
     });
   }
+  // Auto-switch possession after shots and turnovers
+  if(!ap._editIdx && (act.isGoal||act.isSave||act.isOff||ap.type==="TURNOVER")){
+    S.possession = ap.team==="home"?"away":"home";
+  }
   S.actionPanel = null;
   S.selectedAction = null;
   S.pendingPlayer = null;
@@ -1074,7 +1078,7 @@ function renderTeamSetup(side){
       <div class="card-t" style="color:${accent};margin:0;">Effectif (${t.players.length})</div>
       <div class="sel-counter ${selClass}">🏟 Match : <strong>${selCount}</strong></div>
     </div>
-    <div style="max-height:320px;overflow-y:auto;">
+    <div>
       ${t.players.map(p=>`
         <div class="player-card ${p.selected?"":"dimmed"}">
           <div class="sel-toggle ${p.selected?"on":"off"}" data-sel-player="${side}|${p.id}">${p.selected?"✓":""}</div>

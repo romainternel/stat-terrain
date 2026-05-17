@@ -308,8 +308,8 @@ input{font-family:inherit;outline:none;}
   .match-3col{height:calc(100dvh - 78px);overflow:hidden;}
   .m3-left{height:100%;overflow-y:auto;}
   .m3-mid{height:100%;overflow-y:auto;}
-  .m3-right{height:100%;}
-  .court-pick{max-height:calc(100dvh - 120px);}
+  .m3-right{height:100%;overflow-y:auto;}
+  .m3-right .court-pick{max-height:50dvh;width:auto;max-width:100%;}
 }
 /* Portrait: stack layout */
 @media (orientation:portrait){
