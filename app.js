@@ -381,7 +381,8 @@ function clickGoalZone(zone){
 function clickCourtPosition(x,y){
   const ap=S.actionPanel; if(!ap||!ap.shooterId) return;
   ap.mapX=x; ap.mapY=y;
-  validateAndClose(); R();
+  if(!S.trackGK){ validateAndClose(); }
+  R();
 }
 
 function recordTM(team){
@@ -1129,8 +1130,8 @@ function renderMatchPanel(){
   const GZ_LABELS={HG:"↖",HC:"↑",HD:"↗",MG:"←",MC:"●",MD:"→",BG:"↙",BC:"↓",BD:"↘"};
 
   const shotAction=act&&(act.isGoal||act.isSave||act.isOff);
-  const positionMode=ap&&ap.shooterId&&!S.trackGK&&shotAction;
-  const goalZoneMode=ap&&ap.shooterId&&S.trackGK&&shotAction;
+  // After player selected for a shot: court stays but no player buttons
+  const shotMode=ap&&ap.shooterId&&shotAction;
 
   let statusHtml="";
   if(ap){
@@ -1138,26 +1139,33 @@ function renderMatchPanel(){
     statusHtml=`<div class="ap-validate">
       <span style="font-size:11px;font-weight:700;color:${accent};">${editing?"✏️ ":""}${act.icon} ${act.label} — ${S[team].name}</span>
       ${shooter?`<span class="ap-badge" style="background:rgba(123,167,194,.15);color:var(--fenix-sky);border:1px solid var(--fenix-sky);">🟢 #${shooter.number||""} ${shooter.name}</span>`:`<span style="font-size:10px;color:var(--t3);">← Joueur</span>`}
-      ${shooter&&!positionMode&&!goalZoneMode?`<button class="btn btn-xs btn-g" id="ap-validate-btn" style="font-weight:700;">✓</button>`:""}
+      ${shooter&&!shotMode?`<button class="btn btn-xs btn-g" id="ap-validate-btn" style="font-weight:700;">✓</button>`:""}
       <button class="btn btn-xs" style="border-color:var(--border);color:var(--t3);" onclick="S.actionPanel=null;S.selectedAction=null;S.penMode=false;R();">✕</button>
     </div>`;
   }
 
-  if(goalZoneMode){
-    return `<div style="margin-top:4px;">
+  // SHOT MODE: court without players (tappable for position) + optional goal zone below
+  if(shotMode){
+    return `<div style="margin-top:2px;">
       ${statusHtml}
-      <div style="font-size:11px;color:var(--t2);text-align:center;margin:4px 0 6px;">Tap zone de but ↓</div>
-      <div class="goal-zone-grid gz-big">
-        ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
+      <div class="court-pick" style="background-image:url('${COURT_IMG}');cursor:crosshair;">
+        ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:22px;color:var(--fenix-sky);pointer-events:none;text-shadow:0 0 4px rgba(0,0,0,.8);">✕</div>`:""}
+        <div style="position:absolute;inset:0;z-index:3;" data-court-position></div>
       </div>
+      ${S.trackGK?`
+        <div style="font-size:11px;color:var(--t2);text-align:center;margin:6px 0 4px;">Zone de but ↓</div>
+        <div class="goal-zone-grid gz-big">
+          ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
+        </div>
+      `:""}
     </div>`;
   }
 
+  // DEFAULT: court with players (selection mode)
   return `<div style="margin-top:2px;">
     ${statusHtml}
-    <div class="court-pick" style="background-image:url('${COURT_IMG}');${positionMode?"cursor:crosshair;":""}"
-         ${positionMode?"data-court-position":""}>
-      ${!positionMode?positioned.map(p=>{
+    <div class="court-pick" style="background-image:url('${COURT_IMG}');">
+      ${positioned.map(p=>{
         const isSh=ap&&ap.shooterId===p.id;
         const clr=isSh?"var(--fenix-sky)":ap?accent:(S.selectedAction?accent:"var(--t3)");
         return `<div class="cp-player ${isSh?"shooter":""}" data-ap-player="${p.id}"
@@ -1165,11 +1173,8 @@ function renderMatchPanel(){
           <div class="cp-num" style="color:${clr}">${dn(p)}</div>
           <div class="cp-name">${p.name}</div>
         </div>`;
-      }).join(""):""}
-      ${positionMode&&ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:22px;color:var(--fenix-sky);pointer-events:none;text-shadow:0 0 4px rgba(0,0,0,.8);">✕</div>`:""}
-      ${positionMode?`<div style="position:absolute;inset:0;z-index:3;" data-court-position></div>`:""}
+      }).join("")}
     </div>
-    ${positionMode?`<div style="text-align:center;font-size:11px;color:var(--t2);margin-top:4px;">Tap pour marquer la position du tir</div>`:""}
   </div>`;
 }
 
