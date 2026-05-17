@@ -85,7 +85,8 @@ function freshState(){
     playerDetail:null, // {side, playerId} for full-page player shot overlay
     pendingPlayer:null,
     pdSelect:false, // true when selecting PD player for last event
-    penResultSelect:null, // {team} when showing But/Échec after PEN team choice
+    penResultSelect:null, // kept for compat (unused)
+    penMode:false, // true after PO recorded — next GOAL/SAVE/OFF → PEN_*
     feedOpen:false, // side panel for match feed
     gkFilter:{home:"all",away:"all"}, // "all" or specific gkId
     gkShotFilter:{goals:true,saves:true,offs:true}, // toggle shot types on maps
@@ -290,22 +291,6 @@ function selectAction(type){
   R();
 }
 
-function selectPenResult(penType){
-  const team=S.penResultSelect.team;
-  S.penResultSelect=null;
-  const oppTeam=team==="home"?"away":"home";
-  const gk=S[oppTeam].gkId;
-  S.events.unshift({
-    id:gid(), type:penType, team, time:fmtTime(S.time), rawTime:S.time,
-    period:S.period, x:50, y:95,
-    gkId:gk,
-    playerId:null, playerName:null, playerNumber:null,
-    assistId:null, assistName:null, assistNumber:null, goalZone:null,
-  });
-  checkGkConsecutiveAlert();
-  checkTimeoutAdvisor();
-  R();
-}
 
 function clickTeam(team){
   if(!S.selectedAction) return;
@@ -343,16 +328,25 @@ function clickActionPlayer(playerId){
   const ap=S.actionPanel; if(!ap) return;
   const act=ACTIONS[ap.type];
   if(!ap.shooterId){
+    // PenMode: convert GOAL/SAVE/OFF → PEN_GOAL/PEN_SAVE/PEN_OFF, auto-position
+    if(S.penMode && (act.isGoal||act.isSave||act.isOff)){
+      ap.shooterId=playerId;
+      const penMap={GOAL:'PEN_GOAL',SAVE:'PEN_SAVE',OFF:'PEN_OFF'};
+      ap.type=penMap[ap.type]||ap.type;
+      ap.mapX=50; ap.mapY=85;
+      validateAndClose();
+      S.penMode=false;
+      R(); return;
+    }
     ap.shooterId=playerId;
     // FENIX attacking shots: instant validate, no court map needed
     if(ap.team==='home' && (act.isGoal||act.isSave||act.isOff)){
       validateAndClose(); R(); return;
     }
-    // PO: instant validate after player selection, then chain to PEN result
+    // PO: record player, close, activate penMode
     if(ap.type==='PEN_OBT'){
-      const team=ap.team;
       validateAndClose();
-      S.penResultSelect={team};
+      S.penMode=true;
       R(); return;
     }
     // Non-mapped actions (2min, red): auto-validate
@@ -551,6 +545,7 @@ function validateAndClose(){
   S.selectedAction = null;
   S.pendingPlayer = null;
   S.penResultSelect = null;
+  // penMode is cleared explicitly by caller (clickActionPlayer) or undoLast
   checkGkConsecutiveAlert();
   checkTimeoutAdvisor();
 }
@@ -592,6 +587,7 @@ function recordEvent(type, team, x, y, playerId){
 
 function undoLast(){
   if(S.events.length===0) return;
+  if(S.events[0]?.type==='PEN_OBT') S.penMode=false;
   S.events.shift();
   S.pdSelect=false;
   R();
@@ -957,7 +953,7 @@ function newMatch(){
   const jNum=parseInt(S.journee.replace(/\D/g,""))||0;
   S.events=[]; S.time=0; S.period=1; S.selectedAction=null; S.shotOverlay=null;
   S.playerSelect=null; S.pendingPlayer=null; S.penResultSelect=null; S.pdSelect=false;
-  S.actionPanel=null;
+  S.actionPanel=null; S.penMode=false;
   S.tmUsed={mt1:0,mt2:0}; S.tmLastAlert=0; S.coachNotes="";
   S.journee="J"+(jNum+1);
   S.away.name="Adversaire";
@@ -1200,27 +1196,12 @@ function renderMatch(){
         </button>`;
       }).join("")}
     </div>
-    ${S.penResultSelect?`
-      <div class="overlay" style="z-index:999;">
-        <div style="background:var(--card);border-radius:16px;padding:28px 24px;width:90vw;max-width:500px;text-align:center;">
-          <div style="font-size:22px;font-weight:700;color:var(--text);margin-bottom:6px;">🎯 Pénalty</div>
-          <div style="font-size:16px;color:var(--t2);margin-bottom:20px;">${S[S.penResultSelect.team].name}</div>
-          <div style="display:flex;justify-content:center;gap:14px;flex-wrap:wrap;">
-            <button class="btn" data-pen-result="PEN_GOAL" style="border-color:var(--green);color:var(--green);min-width:120px;padding:16px 20px;font-size:16px;font-weight:700;">
-              ⚽ But
-            </button>
-            <button class="btn" data-pen-result="PEN_SAVE" style="border-color:var(--red);color:var(--red);min-width:120px;padding:16px 20px;font-size:16px;font-weight:700;">
-              🧤 Arrêté
-            </button>
-            <button class="btn" data-pen-result="PEN_OFF" style="border-color:var(--orange);color:var(--orange);min-width:120px;padding:16px 20px;font-size:16px;font-weight:700;">
-              ↗ Hors cadre
-            </button>
-          </div>
-          <button class="btn btn-sm" style="margin-top:16px;color:var(--t3);border-color:var(--border);" onclick="S.penResultSelect=null;S.selectedAction=null;R();">Annuler</button>
-        </div>
+    ${S.penMode?`
+      <div style="text-align:center;padding:6px 0;">
+        <span style="display:inline-block;background:rgba(255,196,0,.15);border:1.5px solid var(--yellow);border-radius:20px;padding:5px 16px;font-size:13px;font-weight:700;color:var(--yellow);">🎯 Mode Pénalty — prochain But/Arrêt/HC = Pen</span>
       </div>
     `:""}
-    ${S.selectedAction && !S.penResultSelect && !S.actionPanel?`
+    ${S.selectedAction && !S.actionPanel?`
       <div class="team-zones">
         <div class="team-zone home" data-click-team="home">
           <div style="position:absolute;top:8px;left:8px;" class="tz-pulse" style="background:var(--green);"></div>
@@ -3210,7 +3191,7 @@ function bind(){
       S.season=m.season||S.season; S.journee=m.journee||S.journee;
       S.coachNotes=m.coachNotes||"";
       S.selectedAction=null; S.shotOverlay=null; S.playerSelect=null;
-      S.penResultSelect=null; S.pdSelect=false; S.actionPanel=null;
+      S.penResultSelect=null; S.pdSelect=false; S.actionPanel=null; S.penMode=false;
       // Recalculate TM usage from events
       S.tmUsed={mt1:0,mt2:0};
       S.events.filter(e=>e.type==="TM"&&e.team==="home").forEach(e=>{
