@@ -410,7 +410,6 @@ input{font-family:inherit;outline:none;}
   .ml-left{height:100%;overflow-y:auto;}
   .ml-right{height:100%;overflow:hidden;}
   .ml-court{overflow-y:auto;}
-  .ml-court .court-pick{max-height:52dvh;}
 }
 /* Portrait */
 @media (orientation:portrait){

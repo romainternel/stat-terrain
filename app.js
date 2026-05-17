@@ -1153,20 +1153,20 @@ function renderMatchPanel(){
     </div>`;
   }
 
-  // SHOT MODE: court without players (tappable for position) + optional goal zone below
+  // SHOT MODE: zone de but EN HAUT, terrain en dessous
   if(shotMode){
     return `<div style="margin-top:2px;">
       ${statusHtml}
+      ${S.trackGK?`
+        <div style="font-size:11px;color:var(--t2);text-align:center;margin:0 0 4px;">Zone de but ↑</div>
+        <div class="goal-zone-grid gz-big" style="margin-bottom:6px;">
+          ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
+        </div>
+      `:""}
       <div class="court-pick" style="background-image:url('${COURT_IMG}');cursor:crosshair;">
         ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:22px;color:var(--fenix-sky);pointer-events:none;text-shadow:0 0 4px rgba(0,0,0,.8);">✕</div>`:""}
         <div style="position:absolute;inset:0;z-index:3;" data-court-position></div>
       </div>
-      ${S.trackGK?`
-        <div style="font-size:11px;color:var(--t2);text-align:center;margin:6px 0 4px;">Zone de but ↓</div>
-        <div class="goal-zone-grid gz-big">
-          ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
-        </div>
-      `:""}
     </div>`;
   }
 
