@@ -347,6 +347,10 @@ function clickActionPlayer(playerId){
       R(); return;
     }
     ap.shooterId=playerId;
+    // Home team shots: instant validate (no position/zone needed)
+    if(ap.team==='home'&&(act.isGoal||act.isSave||act.isOff)){
+      validateAndClose(); R(); return;
+    }
     // PO: record player, activate penMode
     if(ap.type==='PEN_OBT'){
       validateAndClose();
@@ -1130,8 +1134,8 @@ function renderMatchPanel(){
   const GZ_LABELS={HG:"↖",HC:"↑",HD:"↗",MG:"←",MC:"●",MD:"→",BG:"↙",BC:"↓",BD:"↘"};
 
   const shotAction=act&&(act.isGoal||act.isSave||act.isOff);
-  // After player selected for a shot: court stays but no player buttons
-  const shotMode=ap&&ap.shooterId&&shotAction;
+  // Shot position/GK zone only for away team (shots against Fenix GK)
+  const shotMode=ap&&ap.shooterId&&shotAction&&ap.team==='away';
 
   let statusHtml="";
   if(ap){
