@@ -88,6 +88,7 @@ function freshState(){
     penResultSelect:null, // kept for compat (unused)
     penMode:false, // true after PO recorded — next GOAL/SAVE/OFF → PEN_*
     trackGK:true, // false = skip map/zones/gkId (simplified mode)
+    possession:"home", // which team's players show on court
     feedOpen:false, // side panel for match feed
     gkFilter:{home:"all",away:"all"}, // "all" or specific gkId
     gkShotFilter:{goals:true,saves:true,offs:true}, // toggle shot types on maps
@@ -326,10 +327,16 @@ function clickTeam(team){
 }
 
 function clickActionPlayer(playerId){
-  const ap=S.actionPanel; if(!ap) return;
+  // Possession-based: create actionPanel on first player tap
+  if(!S.actionPanel){
+    if(!S.selectedAction) return;
+    autoValidatePending();
+    S.actionPanel={type:S.selectedAction, team:S.possession, shooterId:null, pdId:null, mapX:null, mapY:null, goalZone:null};
+  }
+  const ap=S.actionPanel;
   const act=ACTIONS[ap.type];
   if(!ap.shooterId){
-    // PenMode: convert GOAL/SAVE/OFF → PEN_GOAL/PEN_SAVE/PEN_OFF, auto-position
+    // PenMode: convert GOAL/SAVE/OFF → PEN_GOAL/PEN_SAVE/PEN_OFF
     if(S.penMode && (act.isGoal||act.isSave||act.isOff)){
       ap.shooterId=playerId;
       const penMap={GOAL:'PEN_GOAL',SAVE:'PEN_SAVE',OFF:'PEN_OFF'};
@@ -340,24 +347,18 @@ function clickActionPlayer(playerId){
       R(); return;
     }
     ap.shooterId=playerId;
-    // FENIX attacking shots: instant validate, no court map needed
-    if(ap.team==='home' && (act.isGoal||act.isSave||act.isOff)){
-      validateAndClose(); R(); return;
-    }
-    // PO: record player, close, activate penMode
+    // PO: record player, activate penMode
     if(ap.type==='PEN_OBT'){
       validateAndClose();
       S.penMode=true;
       R(); return;
     }
-    // Simplified mode (no GK tracking): instant validate, no map/zone
-    if(!S.trackGK){
-      validateAndClose(); R(); return;
+    // Shot actions (GOAL/SAVE/OFF): switch to position or goal zone mode
+    if(act.isGoal||act.isSave||act.isOff){
+      R(); return; // renderMatchPanel handles the next step display
     }
-    // Non-mapped actions (2min, red): auto-validate
-    if(!act.needsMap && !act.isGoal && !act.isSave && !act.isOff){
-      validateActionPanel(); return;
-    }
+    // All other actions: instant validate after player tap
+    validateAndClose(); R(); return;
   } else if(ap.shooterId===playerId){
     ap.shooterId=null;
   } else {
@@ -369,7 +370,35 @@ function clickActionPlayer(playerId){
 function clickGoalZone(zone){
   const ap=S.actionPanel; if(!ap) return;
   ap.goalZone = ap.goalZone===zone ? null : zone;
+  const act=ACTIONS[ap.type];
+  if(S.trackGK && ap.shooterId && (act.isGoal||act.isSave||act.isOff)){
+    if(ap.mapX==null) ap.mapX=50;
+    validateAndClose(); R(); return;
+  }
   R();
+}
+
+function clickCourtPosition(x,y){
+  const ap=S.actionPanel; if(!ap||!ap.shooterId) return;
+  ap.mapX=x; ap.mapY=y;
+  validateAndClose(); R();
+}
+
+function recordTM(team){
+  if(team==="home"){
+    const mtKey=S.period===1?"mt1":"mt2";
+    if(S.tmUsed[mtKey]>=2||S.tmUsed.mt1+S.tmUsed.mt2>=3){
+      showToast("Plus de temps mort disponible !", true); return;
+    }
+    S.tmUsed[mtKey]++;
+  }
+  S.events.unshift({
+    id:gid(), type:"TM", team, time:fmtTime(S.time), rawTime:S.time,
+    period:S.period, x:null, y:null, gkId:null,
+    playerId:null, playerName:null, playerNumber:null,
+    assistId:null, assistName:null, assistNumber:null, goalZone:null,
+  });
+  checkGkConsecutiveAlert(); checkTimeoutAdvisor(); R();
 }
 
 function clickActionMap(x,y){
@@ -1086,72 +1115,61 @@ function renderTeamSetup(side){
 // ─── MATCH ───
 function renderMatchPanel(){
   const ap=S.actionPanel;
-  const team = ap ? ap.team : (S._lastTeam||"home");
+  const team=ap?ap.team:S.possession;
   const isHome=team==="home";
   const accent=isHome?"var(--fenix-sky)":"var(--red)";
-  let roster = S[team].players.filter(p=>p.selected);
-  if(roster.length===0) roster = S[team].players;
-  const positioned = courtPlayerPositions(roster);
+  let roster=S[team].players.filter(p=>p.selected);
+  if(roster.length===0) roster=S[team].players;
+  const positioned=courtPlayerPositions(roster);
   const dn=(p)=>p.number?p.number:"?";
-  const act = ap ? ACTIONS[ap.type] : null;
+  const act=ap?ACTIONS[ap.type]:null;
   const shooter=ap&&ap.shooterId?S[team].players.find(p=>p.id===ap.shooterId):null;
-  const pdP=ap&&ap.pdId?S[team].players.find(p=>p.id===ap.pdId):null;
 
   const GOAL_ZONES=["HG","HC","HD","MG","MC","MD","BG","BC","BD"];
-  const GZ_LABELS={HG:"\u2196",HC:"\u2B06",HD:"\u2197",MG:"\u2190",MC:"\u25CF",MD:"\u2192",BG:"\u2199",BC:"\u2B07",BD:"\u2198"};
+  const GZ_LABELS={HG:"↖",HC:"↑",HD:"↗",MG:"←",MC:"●",MD:"→",BG:"↙",BC:"↓",BD:"↘"};
+
+  const shotAction=act&&(act.isGoal||act.isSave||act.isOff);
+  const positionMode=ap&&ap.shooterId&&!S.trackGK&&shotAction;
+  const goalZoneMode=ap&&ap.shooterId&&S.trackGK&&shotAction;
 
   let statusHtml="";
   if(ap){
     const editing=ap._editIdx!=null;
     statusHtml=`<div class="ap-validate">
-      <span style="font-size:11px;font-weight:700;color:${accent};">${editing?"\u270F\uFE0F ":""}${act.icon} ${act.label} \u2014 ${S[team].name}</span>
-      ${shooter?`<span class="ap-badge" style="background:rgba(123,167,194,.15);color:var(--fenix-sky);border:1px solid var(--fenix-sky);">\ud83d\udfe2 #${shooter.number||""} ${shooter.name}</span>`:`<span style="font-size:10px;color:var(--t3);">\u2190 Joueur</span>`}
-      ${shooter?`<button class="btn btn-xs btn-g" id="ap-validate-btn" style="font-weight:700;">\u2713</button>`:""}
-      <button class="btn btn-xs" style="border-color:var(--border);color:var(--t3);" onclick="S.actionPanel=null;S.selectedAction=null;R();">\u2715 Annuler</button>
+      <span style="font-size:11px;font-weight:700;color:${accent};">${editing?"✏️ ":""}${act.icon} ${act.label} — ${S[team].name}</span>
+      ${shooter?`<span class="ap-badge" style="background:rgba(123,167,194,.15);color:var(--fenix-sky);border:1px solid var(--fenix-sky);">🟢 #${shooter.number||""} ${shooter.name}</span>`:`<span style="font-size:10px;color:var(--t3);">← Joueur</span>`}
+      ${shooter&&!positionMode&&!goalZoneMode?`<button class="btn btn-xs btn-g" id="ap-validate-btn" style="font-weight:700;">✓</button>`:""}
+      <button class="btn btn-xs" style="border-color:var(--border);color:var(--t3);" onclick="S.actionPanel=null;S.selectedAction=null;S.penMode=false;R();">✕</button>
+    </div>`;
+  }
+
+  if(goalZoneMode){
+    return `<div style="margin-top:4px;">
+      ${statusHtml}
+      <div style="font-size:11px;color:var(--t2);text-align:center;margin:4px 0 6px;">Tap zone de but ↓</div>
+      <div class="goal-zone-grid gz-big">
+        ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
+      </div>
     </div>`;
   }
 
   return `<div style="margin-top:2px;">
     ${statusHtml}
-    <div class="action-panel">
-      <div class="ap-court">
-        <div class="court-pick" style="background-image:url('${COURT_IMG}');min-height:120px;">
-          ${positioned.map(p=>{
-            const isSh=ap&&ap.shooterId===p.id;
-            const isPd=ap&&ap.pdId===p.id;
-            const clr=isSh?"var(--fenix-sky)":isPd?"var(--yellow)":ap?accent:"var(--t3)";
-            return `<div class="cp-player ${isSh?"shooter":""}${isPd?" pd-sel":""}" data-ap-player="${p.id}"
-                 style="left:${p.cx}%;top:${p.cy}%;border-color:${clr};${ap?"":"opacity:.45;"}">
-              <div class="cp-num" style="color:${clr}">${dn(p)}</div>
-              <div class="cp-name">${p.name}</div>
-            </div>`;
-          }).join("")}
-        </div>
-      </div>
-      ${(!act||act.needsMap) && S.trackGK?`<div class="ap-right" style="display:flex;flex-direction:row;gap:6px;">
-        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
-        ${!act||(act.isGoal||act.isSave||act.isOff)?`<div class="goal-zone-grid">
-          ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap&&ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
-        </div>`:""}
-        <svg class="court-svg" id="ap-court-svg" viewBox="0 0 350 208" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;margin:0 auto;border-radius:6px;border:1px solid var(--border);">
-          <image href="${COURT_IMG}" x="0" y="0" width="350" height="208" opacity="0.9"/>
-          ${teamShots(team).map(s=>{
-            const isTurnover=s.type==="TURNOVER";
-            const isPO=s.type==="PEN_OBT";
-            const isJF=s.type==="FREEKICK";
-            const isNonShot=isTurnover||isPO||isJF;
-            const c = ACTIONS[s.type].isGoal?"#50C878":ACTIONS[s.type].isSave?"#E84E5E":isTurnover?"#FF6B6B":isPO?"#F0C75E":isJF?"#B388FF":"#E89A4E";
-            if(isNonShot){
-              return `<rect x="${s.x-3}" y="${s.y-3}" width="6" height="6" rx="1" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
-            }
-            return `<circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}${ACTIONS[s.type].isGoal?"55":"33"}" stroke="${c}" stroke-width="1"/>`;
-          }).join("")}
-          ${ap&&ap.mapX!=null?`<circle cx="${ap.mapX}" cy="${ap.mapY}" r="5" fill="${act&&act.isGoal?"#50C87888":act&&(act.isSave||act.isOff)?"#E84E5E88":"rgba(255,255,255,.5)"}" stroke="${act&&act.isGoal?"#50C878":act&&act.color||"#fff"}" stroke-width="1.5"/>`:""}
-        </svg>
-        </div>
-        ${ap&&ap.shooterId?`<button class="btn btn-g" id="ap-validate-big" style="padding:10px 16px;font-size:20px;font-weight:900;border-radius:8px;writing-mode:vertical-lr;text-orientation:mixed;letter-spacing:4px;min-height:80px;display:flex;align-items:center;justify-content:center;">✓</button>`:""}
-      </div>`:""}
+    <div class="court-pick" style="background-image:url('${COURT_IMG}');${positionMode?"cursor:crosshair;":""}"
+         ${positionMode?"data-court-position":""}>
+      ${!positionMode?positioned.map(p=>{
+        const isSh=ap&&ap.shooterId===p.id;
+        const clr=isSh?"var(--fenix-sky)":ap?accent:(S.selectedAction?accent:"var(--t3)");
+        return `<div class="cp-player ${isSh?"shooter":""}" data-ap-player="${p.id}"
+             style="left:${p.cx}%;top:${p.cy}%;border-color:${clr};${!ap&&!S.selectedAction?"opacity:.45;":""}">
+          <div class="cp-num" style="color:${clr}">${dn(p)}</div>
+          <div class="cp-name">${p.name}</div>
+        </div>`;
+      }).join(""):""}
+      ${positionMode&&ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:22px;color:var(--fenix-sky);pointer-events:none;text-shadow:0 0 4px rgba(0,0,0,.8);">✕</div>`:""}
+      ${positionMode?`<div style="position:absolute;inset:0;z-index:3;" data-court-position></div>`:""}
     </div>
+    ${positionMode?`<div style="text-align:center;font-size:11px;color:var(--t2);margin-top:4px;">Tap pour marquer la position du tir</div>`:""}
   </div>`;
 }
 
@@ -1206,24 +1224,29 @@ function renderMatch(){
       }).join("")}
     </div>
     ${S.penMode?`
-      <div style="text-align:center;padding:6px 0;">
+      <div style="text-align:center;padding:4px 0;">
         <span style="display:inline-block;background:rgba(255,196,0,.15);border:1.5px solid var(--yellow);border-radius:20px;padding:5px 16px;font-size:13px;font-weight:700;color:var(--yellow);">🎯 Mode Pénalty — prochain But/Arrêt/HC = Pen</span>
       </div>
     `:""}
-    ${S.selectedAction && !S.actionPanel?`
-      <div class="team-zones">
-        <div class="team-zone home" data-click-team="home">
-          <div style="position:absolute;top:8px;left:8px;" class="tz-pulse" style="background:var(--green);"></div>
-          <div class="tz-name" style="color:var(--green)">${S.home.name}</div>
-          <div class="tz-sub">${ACTIONS[S.selectedAction].icon} ${ACTIONS[S.selectedAction].label}</div>
-        </div>
-        <div class="team-zone away" data-click-team="away">
-          <div class="tz-name" style="color:var(--red)">${S.away.name}</div>
-          <div class="tz-sub">${ACTIONS[S.selectedAction].icon} ${ACTIONS[S.selectedAction].label}</div>
-        </div>
-      </div>
-    `:""}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+      <button class="poss-btn" data-poss="home"
+        style="padding:10px 6px;border-radius:10px;border:2px solid ${S.possession==='home'?'var(--fenix-sky)':'var(--border)'};background:${S.possession==='home'?'rgba(123,167,194,.12)':'rgba(255,255,255,.02)'};color:${S.possession==='home'?'var(--fenix-sky)':'var(--t2)'};font-size:14px;font-weight:800;text-align:center;">
+        ${S.possession==='home'?'▶ ':''}${S.home.name}
+      </button>
+      <button class="poss-btn" data-poss="away"
+        style="padding:10px 6px;border-radius:10px;border:2px solid ${S.possession==='away'?'var(--red)':'var(--border)'};background:${S.possession==='away'?'rgba(232,70,90,.12)':'rgba(255,255,255,.02)'};color:${S.possession==='away'?'var(--red)':'var(--t2)'};font-size:14px;font-weight:800;text-align:center;">
+        ${S.possession==='away'?'▶ ':''}${S.away.name}
+      </button>
+    </div>
     ${renderMatchPanel()}
+    <div style="display:flex;gap:8px;justify-content:center;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:6px;">
+      <button class="act-btn ${S.selectedAction==='TWO_MIN'?'selected':''}" data-act="TWO_MIN" style="min-width:100px;padding:10px 14px;border-color:${S.selectedAction==='TWO_MIN'?'#FF6B6B':'var(--border)'};">
+        <span class="a-icon">⏱</span><span class="a-label" style="color:#FF6B6B;">2 min</span>
+      </button>
+      <button class="act-btn ${S.selectedAction==='RED'?'selected':''}" data-act="RED" style="min-width:100px;padding:10px 14px;border-color:${S.selectedAction==='RED'?'var(--red)':'var(--border)'};">
+        <span class="a-icon">🟥</span><span class="a-label" style="color:var(--red);">Rouge</span>
+      </button>
+    </div>
     <div class="feed-panel ${S.feedOpen?"open":""}">
       <div class="feed-panel-header">
         <span style="font-weight:700;color:var(--text);font-size:15px;">⚡ Fil du match (${S.events.length})</span>
@@ -1288,6 +1311,7 @@ function renderScoreboard(sh,sa){
         `:`<span style="font-size:10px;color:var(--blue);font-weight:600;">🧤${gkName("home")}</span>`}
         <span class="mono" style="font-size:10px;color:var(--blue);font-weight:700;">${hAllSaves}/${hAllShots}</span>
         <button id="gk-timeline-btn" style="background:rgba(123,167,194,.15);border:1px solid rgba(123,167,194,.3);border-radius:5px;padding:1px 6px;cursor:pointer;font-size:11px;color:var(--fenix-sky);font-weight:700;">📊</button>
+        <button onclick="recordTM('home')" style="padding:2px 8px;border-radius:6px;border:1.5px solid var(--yellow);background:rgba(240,199,94,.1);color:var(--yellow);font-size:11px;font-weight:700;">⏸ TM</button>
         <button class="sb-badge" data-badge="home|TWO_MIN" style="background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.4);color:#FF6B6B;">⏱ ${h2m}</button>
         <button class="sb-badge" data-badge="home|RED" style="background:rgba(232,70,90,.15);border:1px solid rgba(232,70,90,.4);color:var(--red);">🟥 ${hRed}</button>
       </div>
@@ -1299,14 +1323,6 @@ function renderScoreboard(sh,sa){
         <button class="btn btn-sm ${S.running?"btn-r":"btn-g"}" id="t-toggle">${S.running?"⏸":"▶"}</button>
         <button class="btn btn-sm" id="t-reset">↺</button>
       </div>
-      ${(()=>{
-        const used=S.tmUsed.mt1+S.tmUsed.mt2;
-        const left=3-used;
-        return `<button id="tm-btn" class="btn btn-sm" style="margin-top:3px;font-size:11px;font-weight:700;padding:3px 10px;
-          background:${S.selectedAction==="TM"?"rgba(240,199,94,.3)":"rgba(240,199,94,.1)"};
-          border:1.5px solid var(--yellow);
-          color:var(--yellow);">⏸ TM</button>`;
-      })()}
     </div>
     <div class="sb-team">
       <div class="sb-name" style="color:var(--red)">${S.away.name}</div>
@@ -1320,6 +1336,7 @@ function renderScoreboard(sh,sa){
           </select>
         `:`<span style="font-size:10px;color:var(--blue);font-weight:600;">🧤${gkName("away")}</span>`}
         <span class="mono" style="font-size:10px;color:var(--blue);font-weight:700;">${aAllSaves}/${aAllShots}</span>
+        <button onclick="recordTM('away')" style="padding:2px 8px;border-radius:6px;border:1.5px solid var(--yellow);background:rgba(240,199,94,.1);color:var(--yellow);font-size:11px;font-weight:700;">⏸ TM</button>
         <button class="sb-badge" data-badge="away|TWO_MIN" style="background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.4);color:#FF6B6B;">⏱ ${a2m}</button>
         <button class="sb-badge" data-badge="away|RED" style="background:rgba(232,70,90,.15);border:1px solid rgba(232,70,90,.4);color:var(--red);">🟥 ${aRed}</button>
       </div>
@@ -3110,12 +3127,14 @@ function bind(){
   const tt=document.getElementById("t-toggle"); if(tt) tt.onclick=()=>S.running?stopTimer():startTimer();
   const tr=document.getElementById("t-reset"); if(tr) tr.onclick=resetTimer;
   const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;R();};
-  const tmBtn=document.getElementById("tm-btn"); if(tmBtn) tmBtn.onclick=()=>{
-    selectAction("TM");
-  };
 
   // Actions
   document.querySelectorAll("[data-act]").forEach(el=>{ el.onclick=()=>selectAction(el.dataset.act); });
+  // Possession toggle
+  document.querySelectorAll("[data-poss]").forEach(el=>{ el.onclick=()=>{ S.possession=el.dataset.poss; if(!S.actionPanel) R(); else { S.actionPanel.team=S.possession; R(); } }; });
+  // Court position tap (for shot position mode)
+  const courtPos=document.querySelector("[data-court-position]");
+  if(courtPos){ courtPos.onclick=(e)=>{ const rect=courtPos.getBoundingClientRect(); const x=Math.round((e.clientX-rect.left)/rect.width*100); const y=Math.round((e.clientY-rect.top)/rect.height*100); clickCourtPosition(x,y); }; }
   // PEN sub-type buttons
   document.querySelectorAll("[data-pen-result]").forEach(el=>{ el.onclick=()=>selectPenResult(el.dataset.penResult); });
 
