@@ -18,7 +18,7 @@ const POS_XY={
 
 const ACTIONS = {
   GOAL:     {label:"But",        icon:"⚽", color:"var(--green)",  needsMap:true, isGoal:true},
-  SAVE:     {label:"Tir arrêté", icon:"🧤", color:"var(--blue)",   needsMap:true, isSave:true},
+  SAVE:     {label:"Tir arrêté", icon:"🧤", color:"var(--red)",    needsMap:true, isSave:true},
   OFF:      {label:"Tir non cadré",icon:"↗", color:"var(--orange)",needsMap:true, isOff:true},
   TURNOVER: {label:"PB",         icon:"↩",  color:"var(--red)",    needsMap:true},
   PEN_OBT:  {label:"PO",         icon:"📣", color:"var(--yellow)", needsMap:true},
@@ -1243,7 +1243,7 @@ function renderMatch(){
     const a=ACTIONS[k]; const sel=S.selectedAction===k;
     const sizeClass=size==="xl"?"act-h-xl":size==="sm"?"act-h-sm":"";
     return `<button class="act-h ${sizeClass} ${sel?"selected":""}" data-act="${k}">
-      <span class="ah-icon">${a.icon}</span>
+      <span class="ah-icon" style="color:${a.color}">${a.icon}</span>
       <span class="ah-label" style="color:${a.color}">${a.label}</span>
     </button>`;
   };
@@ -1274,6 +1274,10 @@ function renderMatch(){
   <div class="match-layout poss-${S.possession}">
     <!-- COLONNE GAUCHE: équipes + timer -->
     <div class="ml-left">
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:var(--r2);border:1px solid var(--border);">
+        <div class="logo-i" style="width:26px;height:26px;"><img src="${FENIX_LOGO}"></div>
+        <span style="font-size:13px;font-weight:900;letter-spacing:.08em;color:var(--fenix-sky);">CF FENIX STAT</span>
+      </div>
       ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)",h2m,hRed)}
       <div class="ml-timer">
         <button class="per-btn" id="per-btn">MT ${S.period}</button>
@@ -1302,19 +1306,12 @@ function renderMatch(){
       <!-- Barre d'actions horizontale -->
       <div class="ml-actions">
         ${actBtn("GOAL","xl")}
-        ${actBtn("SAVE")}
+        ${actBtn("SAVE","xl")}
         ${actBtn("OFF")}
         <div class="act-h-sep"></div>
         ${actBtn("TURNOVER","sm")}
         ${actBtn("PEN_OBT","sm")}
         ${actBtn("FREEKICK","sm")}
-        <div class="act-h-sep"></div>
-        <div class="ml-ctrl-group">
-          <button class="ml-ctrl-btn" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡ <span class="mono" style="font-size:15px;font-weight:800;">${S.events.length}</span></button>
-          ${S.events.length>0?`<button class="ml-ctrl-btn" style="border-color:var(--red);color:var(--red);" id="undo-btn">↩</button>`:""}
-          ${pdBtnHtml}
-          <button class="ml-ctrl-btn" id="settings-btn" style="border-color:var(--border);color:var(--t2);">⚙</button>
-        </div>
       </div>
 
       <!-- Status: penMode + dernier event -->
@@ -1326,6 +1323,13 @@ function renderMatch(){
       <!-- Terrain -->
       <div class="ml-court">
         ${renderMatchPanel()}
+      </div>
+      <!-- Contrôles bas -->
+      <div class="ml-bottom">
+        <button class="ml-ctrl-btn" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡ <span class="mono" style="font-size:15px;font-weight:800;">${S.events.length}</span></button>
+        ${S.events.length>0?`<button class="ml-ctrl-btn" style="border-color:var(--red);color:var(--red);" id="undo-btn">↩ Annuler</button>`:""}
+        ${pdBtnHtml}
+        <button class="ml-ctrl-btn" id="settings-btn" style="border-color:var(--border);color:var(--t2);">⚙ Réglages</button>
       </div>
     </div>
 
