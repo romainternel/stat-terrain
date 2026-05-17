@@ -100,6 +100,7 @@ function freshState(){
     gkTimeline:false, // open/close GK timeline overlay
     tmUsed:{mt1:0,mt2:0}, // timeouts used per half (max 2/half, 3 total)
     tmLastAlert:0, // timestamp of last TM suggestion to avoid spam
+    settingsOpen:false,
     coachNotes:"", // coach analysis notes for the match
   };
 }
@@ -1199,90 +1200,140 @@ function editEvent(idx){
 
 function renderMatch(){
   const sh=teamScore("home"), sa=teamScore("away");
+  const hMT1=periodScore("home",1), hMT2=periodScore("home",2);
+  const aMT1=periodScore("away",1), aMT2=periodScore("away",2);
+  const h2m=countType("home","TWO_MIN"), a2m=countType("away","TWO_MIN");
+  const hRed=countType("home","RED"), aRed=countType("away","RED");
+  const homeGbs=S.home.players.filter(p=>p.position==="GB"&&p.selected);
+  const awayGbs=S.away.players.filter(p=>p.position==="GB"&&p.selected);
+  const hGk=gkStats(S.home.gkId), aGk=gkStats(S.away.gkId);
+  const hSv=hGk.saves+hGk.penSaves, hSh=hGk.saves+hGk.goals+hGk.penSaves+hGk.penGoals+(hGk.penOffs||0);
+  const aSv=aGk.saves+aGk.penSaves, aSh=aGk.saves+aGk.goals+aGk.penSaves+aGk.penGoals+(aGk.penOffs||0);
+  const hAct=S.possession==="home", aAct=S.possession==="away";
 
-  // Last event correction badges
-  let lastEvHtml = "";
-  if(S.events.length>0 && !S.actionPanel){
-    const ev=S.events[0]; const a=ACTIONS[ev.type];
-    const pLbl=ev.playerNumber?`#${ev.playerNumber} ${ev.playerName||""}`:(ev.playerName||"");
-    const pdLbl=ev.assistName?(ev.assistNumber?`#${ev.assistNumber} ${ev.assistName}`:ev.assistName):"";
-    lastEvHtml=`
-      <span class="ap-badge" style="background:rgba(123,167,194,.1);color:var(--fenix-sky);border:1px solid rgba(123,167,194,.3);font-size:10px;">${a.icon} ${pLbl}</span>
-    `;
-  }
-
-  return `
-    ${renderScoreboard(sh,sa)}
-    <div style="display:flex;justify-content:center;gap:5px;padding:4px 0 4px;flex-wrap:wrap;align-items:center;">
-      ${lastEvHtml}
-      <button class="btn btn-xs" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡ <span class="mono">${S.events.length}</span></button>
-      ${S.events.length>0?`<button class="btn btn-xs" style="border-color:var(--red);color:var(--red);" id="undo-btn">↩</button>`:""}
-      <button class="btn btn-xs btn-g" id="save-match-btn">💾</button>
-      <button class="btn btn-xs" style="border-color:var(--fenix-sky);color:var(--fenix-sky);" id="export-match">📤</button>
-      <button class="btn btn-xs" style="border-color:var(--yellow);color:var(--yellow);" id="import-match">📥</button>
-      <button class="btn btn-xs" style="border-color:var(--fenix-sky);color:var(--fenix-sky);" data-v="setup">✏️</button>
-      <button class="btn btn-xs" id="new-btn">🆕</button>
-    </div>
-    <div class="actions-strip">
-      ${ACTION_BUTTONS.map(k=>{
-        const a=ACTIONS[k];
-        return `<button class="act-btn ${S.selectedAction===k?"selected":""}" data-act="${k}" style="border-color:${S.selectedAction===k?a.color:"var(--border)"}">
-          <span class="a-icon">${a.icon}</span>
-          <span class="a-label" style="color:${a.color}">${a.label}</span>
-        </button>`;
-      }).join("")}
-    </div>
-    ${S.penMode?`
-      <div style="text-align:center;padding:4px 0;">
-        <span style="display:inline-block;background:rgba(255,196,0,.15);border:1.5px solid var(--yellow);border-radius:20px;padding:5px 16px;font-size:13px;font-weight:700;color:var(--yellow);">🎯 Mode Pénalty — prochain But/Arrêt/HC = Pen</span>
+  const teamBlock=(side,score,mt1,mt2,gbs,gkId,sv,sh2,active,accent)=>`
+    <div class="m3-team ${active?"m3-poss-"+side:""}" data-poss="${side}">
+      <div class="m3t-name" style="color:${active?accent:"var(--t2)"};">${S[side].name}</div>
+      <div class="m3t-score mono" style="color:${active?accent:"var(--t2)"};">${score}</div>
+      <div class="m3t-detail mono">${mt1}·${mt2}</div>
+      <div class="m3t-gk">
+        ${gbs.length>0?`<select data-gk-sel="${side}" style="background:var(--bg3);border:1px solid rgba(123,167,194,.2);border-radius:4px;color:var(--blue);font-size:10px;padding:2px 3px;max-width:95px;">
+          <option value="">🧤--</option>
+          ${gbs.map(p=>`<option value="${p.id}" ${gkId===p.id?"selected":""}>${p.number?"🧤#"+p.number+" "+p.name:"🧤"+p.name}</option>`).join("")}
+        </select>`:`<span style="font-size:10px;color:var(--blue);">🧤${gkName(side)}</span>`}
+        ${side==="home"?`<button id="gk-timeline-btn" style="background:rgba(123,167,194,.15);border:1px solid rgba(123,167,194,.3);border-radius:4px;padding:1px 4px;font-size:9px;color:var(--fenix-sky);">📊</button>`:""}
+        <span class="mono" style="font-size:10px;color:var(--blue);font-weight:700;">${sv}/${sh2}</span>
       </div>
-    `:""}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
-      <button class="poss-btn" data-poss="home"
-        style="padding:10px 6px;border-radius:10px;border:2px solid ${S.possession==='home'?'var(--fenix-sky)':'var(--border)'};background:${S.possession==='home'?'rgba(123,167,194,.12)':'rgba(255,255,255,.02)'};color:${S.possession==='home'?'var(--fenix-sky)':'var(--t2)'};font-size:14px;font-weight:800;text-align:center;">
-        ${S.possession==='home'?'▶ ':''}${S.home.name}
-      </button>
-      <button class="poss-btn" data-poss="away"
-        style="padding:10px 6px;border-radius:10px;border:2px solid ${S.possession==='away'?'var(--red)':'var(--border)'};background:${S.possession==='away'?'rgba(232,70,90,.12)':'rgba(255,255,255,.02)'};color:${S.possession==='away'?'var(--red)':'var(--t2)'};font-size:14px;font-weight:800;text-align:center;">
-        ${S.possession==='away'?'▶ ':''}${S.away.name}
-      </button>
-    </div>
-    ${renderMatchPanel()}
-    <div style="display:flex;gap:8px;justify-content:center;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:6px;">
-      <button class="act-btn ${S.selectedAction==='TWO_MIN'?'selected':''}" data-act="TWO_MIN" style="min-width:100px;padding:10px 14px;border-color:${S.selectedAction==='TWO_MIN'?'#FF6B6B':'var(--border)'};">
-        <span class="a-icon">⏱</span><span class="a-label" style="color:#FF6B6B;">2 min</span>
-      </button>
-      <button class="act-btn ${S.selectedAction==='RED'?'selected':''}" data-act="RED" style="min-width:100px;padding:10px 14px;border-color:${S.selectedAction==='RED'?'var(--red)':'var(--border)'};">
-        <span class="a-icon">🟥</span><span class="a-label" style="color:var(--red);">Rouge</span>
-      </button>
-    </div>
-    <div class="feed-panel ${S.feedOpen?"open":""}">
-      <div class="feed-panel-header">
-        <span style="font-weight:700;color:var(--text);font-size:15px;">⚡ Fil du match (${S.events.length})</span>
-        <div style="display:flex;gap:6px;">
-          ${S.events.length>0?`<button class="btn btn-xs" style="border-color:var(--red);color:var(--red);" id="undo-btn-feed">↩ Annuler dernier</button>`:""}
-          <button class="btn btn-xs" id="close-feed" style="border-color:var(--border);color:var(--t2);font-size:16px;">✕ Fermer</button>
-        </div>
-      </div>
-      <div style="padding:6px 12px;font-size:10px;color:var(--t3);border-bottom:1px solid var(--border);">Clique sur une action pour la modifier</div>
-      <div class="feed-panel-body">
-        ${S.events.length===0?`<div class="empty">Aucun événement</div>`:
-          S.events.map((ev,i)=>{
-            const a=ACTIONS[ev.type];
-            const pLabel = ev.playerNumber ? `#${ev.playerNumber}` : (ev.playerName && ev.playerName!=="?"? ev.playerName : "");
-            const pdLabel = ev.assistName ? `<span style="color:var(--yellow);font-size:10px;"> PD:${ev.assistNumber?"#"+ev.assistNumber:ev.assistName}</span>` : "";
-            const gzLabel = ev.goalZone ? `<span style="color:var(--fenix-sky);font-size:9px;"> ${ev.goalZone}</span>` : "";
-            return `<div class="feed-item feed-item-edit" data-edit-ev="${i}">
-              <span class="f-time mono">${ev.time}</span>
-              <span class="f-icon">${a.icon}</span>
-              <span class="f-team" style="color:${ev.team==="home"?"var(--green)":"var(--red)"}">${S[ev.team].name}</span>
-              <span class="f-detail" style="font-weight:600;">${pLabel}${pdLabel}${gzLabel}</span>
-              <span class="f-detail">${ev.x!=null?"📍":""}</span>
-              <span class="f-type" style="color:${a.color}">${a.label}</span>
-            </div>`;
-          }).join("")}
+      <div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap;">
+        <button onclick="recordTM('${side}')" style="padding:2px 5px;border-radius:4px;border:1px solid var(--yellow);background:rgba(240,199,94,.1);color:var(--yellow);font-size:9px;font-weight:700;">⏸TM</button>
+        <button class="sb-badge" data-badge="${side}|TWO_MIN" style="font-size:10px;padding:2px 5px;background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.4);color:#FF6B6B;">⏱${side==="home"?h2m:a2m}</button>
+        <button class="sb-badge" data-badge="${side}|RED" style="font-size:10px;padding:2px 5px;background:rgba(232,70,90,.15);border:1px solid rgba(232,70,90,.4);color:var(--red);">🟥${side==="home"?hRed:aRed}</button>
       </div>
     </div>`;
+
+  const actBtn=(k,sm=false)=>{const a=ACTIONS[k];const sel=S.selectedAction===k;
+    return `<button class="act-v ${sel?"selected":""} ${sm?"act-v-sm":""}" data-act="${k}" style="border-color:${sel?a.color:"var(--border)"};">
+      <span class="av-icon">${a.icon}</span><span class="av-label" style="color:${a.color}">${a.label}</span>
+    </button>`;};
+
+  let pdBtnHtml="";
+  if(S.events.length>0&&!S.actionPanel){
+    const ev=S.events[0]; const hasPd=!!ev.assistName;
+    pdBtnHtml=`<button id="pd-btn" style="padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;background:${hasPd?"rgba(240,199,94,.15)":"rgba(255,255,255,.06)"};border:1px solid ${hasPd?"rgba(240,199,94,.5)":"rgba(255,255,255,.2)"};color:${hasPd?"var(--yellow)":"#ccc"};">${hasPd?"✓PD":"🎯PD"}</button>`;
+  }
+
+  let lastEvHtml="";
+  if(S.events.length>0&&!S.actionPanel){
+    const ev=S.events[0]; const a=ACTIONS[ev.type];
+    const pLbl=ev.playerNumber?`#${ev.playerNumber} ${ev.playerName||""}`:(ev.playerName||"");
+    lastEvHtml=`<div style="font-size:9px;color:var(--fenix-sky);background:rgba(123,167,194,.1);border-radius:5px;padding:2px 5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.icon} ${pLbl}</div>`;
+  }
+
+  const settingsHtml=S.settingsOpen?`<div class="settings-panel" id="settings-panel">
+    <button class="btn btn-sm btn-g" id="save-match-btn" style="width:100%;margin-bottom:4px;">💾 Sauvegarder</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;border-color:var(--fenix-sky);color:var(--fenix-sky);" id="export-match">📤 Exporter</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;border-color:var(--yellow);color:var(--yellow);" id="import-match">📥 Importer</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;border-color:var(--fenix-sky);color:var(--fenix-sky);" data-v="setup">✏️ Effectifs</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:4px;" id="new-btn">🆕 Nouveau</button>
+    <button class="btn btn-sm" style="width:100%;border-color:var(--border);color:var(--t3);" id="close-settings">✕ Fermer</button>
+  </div>`:"";
+
+  return `
+  <div class="match-3col">
+    <div class="m3-left">
+      ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)")}
+      <div class="m3-timer">
+        <button class="per-btn" id="per-btn">MT ${S.period}</button>
+        <div class="timer-d mono ${S.running?"run":"stop"}" id="tmr">${fmtTime(S.time)}</div>
+        <div class="timer-btns">
+          <button class="btn btn-sm ${S.running?"btn-r":"btn-g"}" id="t-toggle">${S.running?"⏸":"▶"}</button>
+          <button class="btn btn-sm" id="t-reset">↺</button>
+        </div>
+      </div>
+      ${teamBlock("away",sa,aMT1,aMT2,awayGbs,S.away.gkId,aSv,aSh,aAct,"var(--red)")}
+      <div class="m3-extra">
+        <div style="font-size:9px;color:var(--t3);text-align:center;margin-bottom:3px;">
+          <span id="edit-season" style="cursor:pointer;">${S.season}</span>
+          <span style="margin:0 3px;">·</span>
+          <span id="edit-journee" style="cursor:pointer;color:var(--yellow);font-weight:700;">${S.journee}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
+          <span style="font-size:9px;color:var(--t2);">🧤 GB</span>
+          <button onclick="S.trackGK=!S.trackGK;R();" style="padding:1px 6px;border-radius:4px;border:1px solid ${S.trackGK?"var(--fenix-sky)":"var(--border)"};background:${S.trackGK?"rgba(123,167,194,.15)":"transparent"};color:${S.trackGK?"var(--fenix-sky)":"var(--t3)"};font-size:9px;font-weight:700;">${S.trackGK?"✓ ON":"✗ OFF"}</button>
+        </div>
+      </div>
+    </div>
+    <div class="m3-mid">
+      ${S.penMode?`<div style="background:rgba(255,196,0,.15);border:1.5px solid var(--yellow);border-radius:6px;padding:3px 5px;text-align:center;font-size:9px;font-weight:700;color:var(--yellow);">🎯 PEN</div>`:""}
+      ${actBtn("GOAL")}
+      ${actBtn("SAVE")}
+      ${actBtn("OFF")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TURNOVER",true)}${actBtn("PEN_OBT",true)}</div>
+      ${actBtn("FREEKICK")}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">${actBtn("TWO_MIN",true)}${actBtn("RED",true)}</div>
+      <div style="flex:1;min-height:4px;"></div>
+      ${lastEvHtml}
+      <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;padding-top:4px;">
+        <button class="btn btn-xs" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡<span class="mono">${S.events.length}</span></button>
+        ${S.events.length>0?`<button class="btn btn-xs" style="border-color:var(--red);color:var(--red);" id="undo-btn">↩</button>`:""}
+        ${pdBtnHtml}
+        <button class="btn btn-xs" id="settings-btn" style="border-color:var(--border);color:var(--t2);">⚙</button>
+      </div>
+    </div>
+    <div class="m3-right">
+      ${renderMatchPanel()}
+    </div>
+    ${settingsHtml}
+  </div>
+  <div class="feed-panel ${S.feedOpen?"open":""}">
+    <div class="feed-panel-header">
+      <span style="font-weight:700;color:var(--text);font-size:15px;">⚡ Fil du match (${S.events.length})</span>
+      <div style="display:flex;gap:6px;">
+        ${S.events.length>0?`<button class="btn btn-xs" style="border-color:var(--red);color:var(--red);" id="undo-btn-feed">↩ Annuler</button>`:""}
+        <button class="btn btn-xs" id="close-feed" style="border-color:var(--border);color:var(--t2);">✕</button>
+      </div>
+    </div>
+    <div style="padding:6px 12px;font-size:10px;color:var(--t3);border-bottom:1px solid var(--border);">Clique pour modifier</div>
+    <div class="feed-panel-body">
+      ${S.events.length===0?`<div class="empty">Aucun événement</div>`:
+        S.events.map((ev,i)=>{
+          const a=ACTIONS[ev.type];
+          const pLabel=ev.playerNumber?`#${ev.playerNumber}`:(ev.playerName&&ev.playerName!=="?"?ev.playerName:"");
+          const pdLabel=ev.assistName?`<span style="color:var(--yellow);font-size:10px;"> PD:${ev.assistNumber?"#"+ev.assistNumber:ev.assistName}</span>`:"";
+          const gzLabel=ev.goalZone?`<span style="color:var(--fenix-sky);font-size:9px;"> ${ev.goalZone}</span>`:"";
+          return `<div class="feed-item feed-item-edit" data-edit-ev="${i}">
+            <span class="f-time mono">${ev.time}</span>
+            <span class="f-icon">${a.icon}</span>
+            <span class="f-team" style="color:${ev.team==="home"?"var(--green)":"var(--red)"}">${S[ev.team].name}</span>
+            <span class="f-detail" style="font-weight:600;">${pLabel}${pdLabel}${gzLabel}</span>
+            <span class="f-detail">${ev.x!=null?"📍":""}</span>
+            <span class="f-type" style="color:${a.color}">${a.label}</span>
+          </div>`;
+        }).join("")}
+    </div>
+  </div>
+  ${renderPdPrompt()}
+  ${S.pdSelect?renderPdSelect():""}`;
 }
 
 function periodScore(side,per){
@@ -3185,6 +3236,11 @@ function bind(){
   if(so) so.onclick=(e)=>{if(e.target===so){S.shotOverlay=null;S.selectedAction=null;R();}};
 
   // Undo / Save / New
+  // Settings panel
+  const settBtn=document.getElementById("settings-btn");
+  if(settBtn) settBtn.onclick=()=>{S.settingsOpen=!S.settingsOpen;R();};
+  const closeSett=document.getElementById("close-settings");
+  if(closeSett) closeSett.onclick=()=>{S.settingsOpen=false;R();};
   const ub=document.getElementById("undo-btn"); if(ub) ub.onclick=undoLast;
   const tf=document.getElementById("toggle-feed"); if(tf) tf.onclick=()=>{S.feedOpen=!S.feedOpen;R();};
   const cf=document.getElementById("close-feed"); if(cf) cf.onclick=()=>{S.feedOpen=false;R();};

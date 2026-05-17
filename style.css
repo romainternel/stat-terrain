@@ -270,3 +270,49 @@ input{font-family:inherit;outline:none;}
 .pd-prompt-no{padding:16px 36px;border-radius:14px;border:2px solid rgba(232,70,90,.5);
   background:rgba(232,70,90,.06);color:var(--red);font-size:20px;font-weight:800;cursor:pointer;transition:all .12s;}
 .pd-prompt-no:active{background:rgba(232,70,90,.2);transform:scale(.94);}
+
+/* ── 3-COLUMN MATCH LAYOUT ── */
+.match-3col{display:grid;grid-template-columns:190px 175px 1fr;gap:8px;align-items:start;}
+.m3-left{display:flex;flex-direction:column;gap:5px;}
+.m3-mid{display:flex;flex-direction:column;gap:4px;}
+.m3-right{display:flex;flex-direction:column;}
+.m3-team{background:var(--card);border-radius:10px;padding:8px 10px;border:2px solid var(--border);
+  transition:border-color .2s,background .2s;cursor:pointer;user-select:none;-webkit-user-select:none;}
+.m3-team:active{opacity:.85;}
+.m3-team.m3-poss-home{border-color:var(--fenix-sky);background:rgba(123,167,194,.08);}
+.m3-team.m3-poss-away{border-color:var(--red);background:rgba(232,70,90,.08);}
+.m3t-name{font-size:15px;font-weight:800;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.m3t-score{font-size:40px;font-weight:800;line-height:1;}
+.m3t-detail{font-size:9px;color:var(--t2);margin-bottom:3px;}
+.m3t-gk{display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-bottom:3px;}
+.m3-timer{text-align:center;padding:6px;background:var(--card);border-radius:10px;border:1px solid var(--border);}
+.m3-extra{padding:6px 8px;background:var(--card);border-radius:8px;border:1px solid var(--border);}
+
+/* Vertical action buttons */
+.act-v{width:100%;padding:9px 8px;border-radius:8px;border:2px solid var(--border);
+  background:rgba(255,255,255,.02);display:flex;align-items:center;gap:7px;transition:all .15s;}
+.act-v:active{transform:scale(.95);background:rgba(255,255,255,.06);}
+.act-v.selected{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.25);}
+.act-v.act-v-sm{padding:6px 6px;}
+.av-icon{font-size:20px;flex-shrink:0;}
+.av-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+
+/* Settings panel */
+.settings-panel{position:fixed;bottom:16px;right:16px;background:var(--bg2);
+  border:1px solid var(--border);border-radius:12px;padding:10px;z-index:500;
+  min-width:155px;box-shadow:0 4px 24px rgba(0,0,0,.6);}
+
+/* Landscape: fix height so no scrolling occurs */
+@media (orientation:landscape) and (min-width:700px){
+  body{overflow:hidden;height:100dvh;}
+  .match-3col{height:calc(100dvh - 78px);overflow:hidden;}
+  .m3-left{height:100%;overflow-y:auto;}
+  .m3-mid{height:100%;overflow-y:auto;}
+  .m3-right{height:100%;}
+  .court-pick{max-height:calc(100dvh - 120px);}
+}
+/* Portrait: stack layout */
+@media (orientation:portrait){
+  .match-3col{grid-template-columns:1fr;gap:6px;}
+  body{overflow:auto;}
+}
