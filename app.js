@@ -1154,23 +1154,22 @@ function renderMatchPanel(){
     </div>`;
   }
 
-  // SHOT MODE: terrain plein format, goal zone en overlay après sélection position
+  // SHOT MODE: étape 1 = terrain, étape 2 = overlay zone de but (terrain bloqué)
   if(shotMode){
     const showGZ=S.trackGK&&ap.mapX!=null;
     return `<div style="margin-top:2px;">
       ${statusHtml}
-      <div class="court-pick" style="background-image:url('${COURT_IMG}');cursor:crosshair;">
+      <div class="court-pick" style="background-image:url('${COURT_IMG}');cursor:${showGZ?"default":"crosshair"};">
         ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:20px;color:#FFF;pointer-events:none;text-shadow:0 0 6px #000;z-index:6;">✕</div>`:""}
         ${showGZ?`
-          <div style="position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px;background:rgba(9,20,32,.88);backdrop-filter:blur(3px);border-radius:6px;pointer-events:none;">
+          <div style="position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px;background:rgba(9,20,32,.92);backdrop-filter:blur(4px);border-radius:6px;">
             <div style="font-size:11px;color:var(--t2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Zone d'impact dans le but</div>
-            <div class="goal-zone-grid gz-big" style="pointer-events:none;width:92%;">
-              ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}" style="pointer-events:auto;">${GZ_LABELS[z]}</div>`).join("")}
+            <div class="goal-zone-grid gz-big" style="width:92%;">
+              ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
             </div>
-            <div style="font-size:9px;color:var(--t3);">Clique sur le terrain pour changer la position</div>
+            <button onclick="S.actionPanel.mapX=null;S.actionPanel.mapY=null;R();" style="font-size:10px;padding:4px 14px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--t3);font-family:inherit;cursor:pointer;">↩ Modifier la position</button>
           </div>
-        `:""}
-        <div style="position:absolute;inset:0;z-index:3;" data-court-position></div>
+        `:`<div style="position:absolute;inset:0;z-index:3;" data-court-position></div>`}
       </div>
     </div>`;
   }
