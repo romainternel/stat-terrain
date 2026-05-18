@@ -1191,6 +1191,16 @@ function renderMatchPanel(){
   </div>`;
 }
 
+function deleteEvent(idx){
+  const ev=S.events[idx]; if(!ev) return;
+  const a=ACTIONS[ev.type];
+  const pLabel=ev.playerNumber?`#${ev.playerNumber} ${ev.playerName||""}`:(ev.playerName||"");
+  const desc=`MT${ev.period} — ${ev.time}\n${a.icon} ${a.label} · ${S[ev.team].name}${pLabel?` · ${pLabel}`:""}${ev.goalZone?` · Zone ${ev.goalZone}`:""}`;
+  if(!safeConfirm(`Supprimer cet événement ?\n\n${desc}`)) return;
+  S.events.splice(idx,1);
+  R();
+}
+
 function editEvent(idx){
   const ev=S.events[idx]; if(!ev) return;
   S.feedOpen=false;
@@ -1363,6 +1373,7 @@ function renderMatch(){
             <span class="f-detail" style="font-weight:600;">${pLabel}${pdLabel}${gzLabel}</span>
             <span class="f-detail">${ev.x!=null?"📍":""}</span>
             <span class="f-type" style="color:${a.color}">${a.label}</span>
+            <button class="feed-del-btn" data-del-ev="${i}">🗑</button>
           </div>`;
         }).join("")}
     </div>
@@ -3283,6 +3294,9 @@ function bind(){
   // Edit events from feed
   document.querySelectorAll("[data-edit-ev]").forEach(el=>{
     el.onclick=()=>editEvent(parseInt(el.dataset.editEv));
+  });
+  document.querySelectorAll("[data-del-ev]").forEach(el=>{
+    el.onclick=(e)=>{ e.stopPropagation(); deleteEvent(parseInt(el.dataset.delEv)); };
   });
   
   const nb=document.getElementById("new-btn"); if(nb) nb.onclick=newMatch;

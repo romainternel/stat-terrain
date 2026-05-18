@@ -140,6 +140,10 @@ input{font-family:inherit;outline:none;}
 .feed-panel-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px;}
 .feed-item-edit{cursor:pointer;border-radius:6px;padding:2px 4px;transition:background .15s;}
 .feed-item-edit:active{background:rgba(123,167,194,.2);}
+.feed-del-btn{flex-shrink:0;margin-left:6px;padding:3px 8px;border-radius:5px;
+  border:1px solid rgba(232,70,90,.3);background:rgba(232,70,90,.06);
+  color:var(--red);font-size:13px;cursor:pointer;line-height:1;}
+.feed-del-btn:active{background:rgba(232,70,90,.22);}
 .action-panel{display:flex;gap:8px;padding:2px;flex-direction:column;}
 .action-panel .ap-court{width:100%;}
 .action-panel .ap-right{width:100%;display:flex;flex-direction:column;gap:4px;}
