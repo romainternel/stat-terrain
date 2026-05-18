@@ -1154,18 +1154,22 @@ function renderMatchPanel(){
     </div>`;
   }
 
-  // SHOT MODE: zone de but EN HAUT, terrain en dessous
+  // SHOT MODE: terrain plein format, goal zone en overlay après sélection position
   if(shotMode){
+    const showGZ=S.trackGK&&ap.mapX!=null;
     return `<div style="margin-top:2px;">
       ${statusHtml}
-      ${S.trackGK?`
-        <div style="font-size:11px;color:var(--t2);text-align:center;margin:0 0 4px;">Zone de but ↑</div>
-        <div class="goal-zone-grid gz-big" style="margin-bottom:6px;">
-          ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
-        </div>
-      `:""}
       <div class="court-pick" style="background-image:url('${COURT_IMG}');cursor:crosshair;">
-        ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:22px;color:var(--fenix-sky);pointer-events:none;text-shadow:0 0 4px rgba(0,0,0,.8);">✕</div>`:""}
+        ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:20px;color:#FFF;pointer-events:none;text-shadow:0 0 6px #000;z-index:6;">✕</div>`:""}
+        ${showGZ?`
+          <div style="position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px;background:rgba(9,20,32,.88);backdrop-filter:blur(3px);border-radius:6px;pointer-events:none;">
+            <div style="font-size:11px;color:var(--t2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Zone d'impact dans le but</div>
+            <div class="goal-zone-grid gz-big" style="pointer-events:none;width:92%;">
+              ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}" style="pointer-events:auto;">${GZ_LABELS[z]}</div>`).join("")}
+            </div>
+            <div style="font-size:9px;color:var(--t3);">Clique sur le terrain pour changer la position</div>
+          </div>
+        `:""}
         <div style="position:absolute;inset:0;z-index:3;" data-court-position></div>
       </div>
     </div>`;
