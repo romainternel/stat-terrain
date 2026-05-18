@@ -1043,9 +1043,10 @@ function R(){
 }
 
 function renderHeader(){
-  const views=[{id:"setup",l:"⚙️ Équipes"},{id:"match",l:"⚡ Match"},{id:"stats",l:"📊 Stats"},{id:"bilan",l:"📈 Bilan"},{id:"history",l:"📁 Matchs"}];
+  const views=[{id:"setup",l:"🤾 Équipes"},{id:"match",l:"⚡ Match"},{id:"stats",l:"📊 Stats"},{id:"bilan",l:"📈 Bilan"},{id:"history",l:"📁 Matchs"}];
   return `<div class="hdr">
     <div class="logo"><div class="logo-i"><img src="${FENIX_LOGO}"></div><div><h1>CF FENIX STAT</h1><small>Toulouse Handball</small></div></div>
+    ${S.view==="match"?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>`:""}
     <div class="nav">${views.map(v=>`<button class="nav-b ${S.view===v.id?"on":""}" data-v="${v.id}">${v.l}</button>`).join("")}</div>
   </div>`;
 }
@@ -1216,7 +1217,7 @@ function renderMatch(){
   const hAct=S.possession==="home", aAct=S.possession==="away";
 
   const teamBlock=(side,score,mt1,mt2,gbs,gkId,sv,sh2,active,accent,h2,r)=>`
-    <div class="ml-team ${active?"ml-team-active":""} ml-team-${side}" data-poss="${side}">
+    <div class="ml-team ${active?"ml-team-active":""} ml-team-${side}">
       <div class="mlt-top">
         <div>
           <div class="mlt-name" style="color:${active?accent:"var(--t2)"};">${S[side].name}</div>
@@ -1237,6 +1238,7 @@ function renderMatch(){
         <button class="mlt-btn-sanc sb-badge" data-badge="${side}|TWO_MIN">⏱ ${h2}</button>
         <button class="mlt-btn-sanc mlt-btn-red sb-badge" data-badge="${side}|RED">🟥 ${r}</button>
       </div>
+      <button class="mlt-poss-btn ${active?"mlt-poss-active mlt-poss-"+side:""}" data-poss="${side}">${active?"◉ POSSESSION":"○"}</button>
     </div>`;
 
   const actBtn=(k,size="md")=>{
@@ -1276,7 +1278,8 @@ function renderMatch(){
     <div class="ml-left">
       <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:var(--r2);border:1px solid var(--border);">
         <div class="logo-i" style="width:26px;height:26px;"><img src="${FENIX_LOGO}"></div>
-        <span style="font-size:13px;font-weight:900;letter-spacing:.08em;color:var(--fenix-sky);">CF FENIX STAT</span>
+        <span style="font-size:10px;font-weight:700;color:var(--t2);white-space:nowrap;">🧤 Suivi GB</span>
+        <button onclick="S.trackGK=!S.trackGK;R();" style="margin-left:auto;padding:3px 10px;border-radius:20px;border:1.5px solid ${S.trackGK?"var(--fenix-sky)":"var(--border)"};background:${S.trackGK?"rgba(95,168,211,.15)":"transparent"};color:${S.trackGK?"var(--fenix-sky)":"var(--t3)"};font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;">${S.trackGK?"✓ ON":"✗ OFF"}</button>
       </div>
       ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)",h2m,hRed)}
       <div class="ml-timer">
@@ -1289,14 +1292,10 @@ function renderMatch(){
       </div>
       ${teamBlock("away",sa,aMT1,aMT2,awayGbs,S.away.gkId,aSv,aSh,aAct,"var(--red)",a2m,aRed)}
       <div class="ml-extra">
-        <div style="font-size:10px;color:var(--t3);text-align:center;margin-bottom:4px;">
+        <div style="font-size:10px;color:var(--t3);text-align:center;">
           <span id="edit-season" style="cursor:pointer;">${S.season}</span>
           <span style="margin:0 4px;">·</span>
           <span id="edit-journee" style="cursor:pointer;color:var(--yellow);font-weight:700;">${S.journee}</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
-          <span style="font-size:10px;color:var(--t2);font-weight:600;">🧤 Suivi GB</span>
-          <button onclick="S.trackGK=!S.trackGK;R();" style="padding:3px 10px;border-radius:6px;border:1.5px solid ${S.trackGK?"var(--fenix-sky)":"var(--border)"};background:${S.trackGK?"rgba(95,168,211,.15)":"transparent"};color:${S.trackGK?"var(--fenix-sky)":"var(--t3)"};font-size:11px;font-weight:700;">${S.trackGK?"✓ ON":"✗ OFF"}</button>
         </div>
       </div>
     </div>
@@ -1329,7 +1328,6 @@ function renderMatch(){
         <button class="ml-ctrl-btn" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡ <span class="mono" style="font-size:15px;font-weight:800;">${S.events.length}</span></button>
         ${S.events.length>0?`<button class="ml-ctrl-btn" style="border-color:var(--red);color:var(--red);" id="undo-btn">↩ Annuler</button>`:""}
         ${pdBtnHtml}
-        <button class="ml-ctrl-btn" id="settings-btn" style="border-color:var(--border);color:var(--t2);">⚙ Réglages</button>
       </div>
     </div>
 
