@@ -1238,7 +1238,10 @@ function renderMatch(){
         <button class="mlt-btn-sanc sb-badge" data-badge="${side}|TWO_MIN">⏱ ${h2}</button>
         <button class="mlt-btn-sanc mlt-btn-red sb-badge" data-badge="${side}|RED">🟥 ${r}</button>
       </div>
-      <button class="mlt-poss-btn ${active?"mlt-poss-active mlt-poss-"+side:""}" data-poss="${side}">${active?"◉ POSSESSION":"○"}</button>
+      <button class="mlt-poss-btn ${active?"mlt-poss-active mlt-poss-"+side:""}" data-poss="${side}">
+        <span class="poss-icon">${active?"◉":"○"}</span>
+        <span class="poss-label">${active?"POSSESSION":""}</span>
+      </button>
     </div>`;
 
   const actBtn=(k,size="md")=>{
