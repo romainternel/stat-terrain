@@ -1140,8 +1140,8 @@ function renderMatchPanel(){
   const GZ_LABELS={HG:"↖",HC:"↑",HD:"↗",MG:"←",MC:"●",MD:"→",BG:"↙",BC:"↓",BD:"↘"};
 
   const shotAction=act&&(act.isGoal||act.isSave||act.isOff);
-  // Shot position/GK zone only for away team (shots against Fenix GK)
-  const shotMode=ap&&ap.shooterId&&shotAction&&ap.team==='away';
+  // Shot position required for both teams
+  const shotMode=ap&&ap.shooterId&&shotAction;
 
   let statusHtml="";
   if(ap){
