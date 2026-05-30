@@ -348,10 +348,6 @@ function clickActionPlayer(playerId){
       R(); return;
     }
     ap.shooterId=playerId;
-    // Home team shots: instant validate (no position/zone needed)
-    if(ap.team==='home'&&(act.isGoal||act.isSave||act.isOff)){
-      validateAndClose(); R(); return;
-    }
     // PO: record player, activate penMode
     if(ap.type==='PEN_OBT'){
       validateAndClose();
