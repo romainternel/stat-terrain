@@ -48,6 +48,18 @@ input{font-family:inherit;outline:none;}
   color:#999;font-size:14px;font-weight:600;transition:all .2s;}
 .nav-b.on{border-color:var(--fenix-sky);color:var(--fenix-sky);background:rgba(123,167,194,.1);}
 
+@media(max-width:700px){
+  .hdr{gap:6px;}
+  .logo-i{width:28px;height:28px;}
+  .logo h1{font-size:12px;}
+  .logo small{display:none;}
+  #settings-btn{flex-shrink:0;}
+  .nav{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:1;min-width:0;
+    box-shadow:inset -14px 0 10px -10px rgba(0,0,0,.6);}
+  .nav::-webkit-scrollbar{display:none;}
+  .nav-b{flex-shrink:0;padding:7px 10px;font-size:12px;white-space:nowrap;}
+}
+
 /* ── SETUP ── */
 .setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 @media(max-width:700px){.setup-grid{grid-template-columns:1fr;}}
