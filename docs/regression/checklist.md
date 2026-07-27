@@ -17,6 +17,7 @@
 | Layout Match iPhone paysage | STORY-03 | Score/timer/contrôles FENIX visibles sans scroll ; terrain agrandi (scroll encore nécessaire pour l'effectif complet, cf. QA-03) | Critique | 2026-07-27 (STORY-03, QA PASSED WITH NOTES — voir `docs/qa/QA-03-layout-match-iphone-paysage.md`) |
 | Navigation header sur iPhone (5 onglets atteignables) | STORY-18 | Tous les onglets atteignables sans être coupés hors écran, portrait et paysage | Critique | 2026-07-23 (STORY-18, QA PASSED) |
 | Étiquettes joueurs sur le terrain lisibles (largeur réduite) | STORY-19 | Aucun chevauchement avec un effectif réel (plusieurs joueurs par position) ; effectif complet dégradé mais lisible | Critique | 2026-07-27 (STORY-19, QA PASSED WITH NOTES — zone tactile sous 44px, limite physique assumée, voir `docs/qa/QA-19-chevauchement-joueurs-terrain.md`) |
+| Cartes Stats/Bilan/Setup avec relief visuel | STORY-04 | `.card`/`.gk-stat` avec dégradé/bordure/ombre cohérents, sans régression de contraste | Important | 2026-07-27 (STORY-04, QA PASSED WITH NOTES — impact visuel confirmé mais jugé insuffisant à lui seul pour "ça claque", voir `docs/qa/QA-04-polish-tokens-ombres-cartes.md`) |
 
 ## Note du Regression Guardian
 
