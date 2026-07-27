@@ -276,6 +276,12 @@ input{font-family:inherit;outline:none;}
 .cp-player .cp-num{font-size:22px;font-weight:800;line-height:1;}
 .cp-player .cp-name{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;color:var(--t2);line-height:1;}
 
+@media(max-width:700px){
+  .cp-player{padding:2px 6px;gap:3px;}
+  .cp-player .cp-num{font-size:15px;}
+  .cp-player .cp-name{font-size:11px;max-width:15vw;}
+}
+
 /* PD prompt after goal */
 .pd-prompt-box{background:#1A2840;border-radius:20px;padding:32px 24px;width:min(340px,88vw);
   border:2px solid var(--green);text-align:center;}
