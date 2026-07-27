@@ -6,7 +6,7 @@
 | Feature | Introduite | Critère de bon fonctionnement | Criticité | Dernière vérif. OK |
 |---|---|---|---|---|
 | Navigation entre les 5 onglets (Équipes/Match/Stats/Bilan/Matchs) | historique | Cliquer un onglet du header bascule vers l'écran correspondant, sur iPad et iPhone | Critique | 2026-07-23 (STORY-18) |
-| Saisie d'action en match (workflow complet) | historique | Sélection action → équipe → joueur → terrain → zone de but → validation, sans blocage | Critique | Non re-vérifié dans ce cycle (cf. STORY-09, toujours ouverte) |
+| Saisie d'action en match (workflow complet) | historique | Sélection action → joueur → terrain → zone de but → validation, sans blocage | Critique | 2026-07-27 (STORY-09 — audit par vrais clics, BUT/PB/2min/PD/undo testés en direct, SAVE/OFF/PO/jet franc/RED/TM vérifiés par lecture de code, aucune friction trouvée) |
 | Alertes automatiques (TM conseillé, changez de GB) | historique | Se déclenchent selon les règles documentées dans `CLAUDE.md`, anti-spam 30s | Important | Non re-vérifié dans ce cycle |
 | Stats GB (arrêts/total, zones d'impact) | historique | Calculs corrects, filtres MT1/MT2 fonctionnels | Important | Non re-vérifié dans ce cycle |
 | Export PDF (3 pages) | historique | Génère un PDF avec comparatif, joueurs, gardiens | Important | Non re-vérifié dans ce cycle |

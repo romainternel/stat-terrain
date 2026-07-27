@@ -387,10 +387,6 @@ input{font-family:inherit;outline:none;}
   box-shadow:0 0 14px rgba(var(--accent-rgb),.22);}
 .act-h-xl{flex:2.4;padding:10px 8px;}
 .act-h-sm{flex:1.1;}
-.act-h[data-act="TWO_MIN"]{border-color:rgba(255,107,107,.20);background:rgba(255,107,107,.04);}
-.act-h[data-act="RED"]{border-color:rgba(232,70,90,.20);background:rgba(232,70,90,.04);}
-.act-h[data-act="TWO_MIN"].selected{border-color:#FF6B6B;box-shadow:0 0 12px rgba(255,107,107,.25);}
-.act-h[data-act="RED"].selected{border-color:var(--red);box-shadow:0 0 12px rgba(232,70,90,.25);}
 .ah-icon{font-size:22px;line-height:1;}
 .act-h-xl .ah-icon{font-size:28px;}
 .act-h-sm .ah-icon{font-size:18px;}
