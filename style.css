@@ -459,3 +459,23 @@ input{font-family:inherit;outline:none;}
   .match-layout{grid-template-columns:1fr;gap:6px;}
   body{overflow:auto;}
 }
+/* Portrait iPhone (largeur réduite) — condense le bloc équipes/timer et corrige le débordement de la barre d'actions */
+@media (max-width:700px) and (orientation:portrait){
+  .ml-left{gap:4px;}
+  .ml-team{padding:8px 10px;}
+  .mlt-top{margin-bottom:3px;}
+  .mlt-score{font-size:32px;}
+  .mlt-gk{margin-bottom:3px;}
+  .ml-timer{padding:6px 8px;}
+  .ml-timer .timer-d{font-size:28px;}
+  .ml-timer .timer-btns{margin-top:4px;}
+  .mlt-poss-btn{margin-top:4px;padding:4px;}
+  .mlt-poss-btn .poss-icon{font-size:16px;}
+  .mlt-poss-home.mlt-poss-active .poss-icon,
+  .mlt-poss-away.mlt-poss-active .poss-icon{font-size:20px;}
+
+  .ml-actions{overflow-x:auto;-webkit-overflow-scrolling:touch;
+    box-shadow:inset -14px 0 10px -10px rgba(0,0,0,.6);}
+  .ml-actions::-webkit-scrollbar{display:none;}
+  .act-h,.act-h-xl,.act-h-sm{flex:0 0 auto;min-width:56px;}
+}

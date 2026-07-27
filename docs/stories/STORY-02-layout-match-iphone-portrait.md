@@ -41,3 +41,19 @@ Aucune (recommandé après un passage rapide de `STORY-09` si des frictions de w
 ## Taille
 
 M
+
+## Notes du Developer (implémentation livrée le 2026-07-27)
+
+**Fix 1 — chevauchement de la barre d'actions** : la cause réelle était `.act-h`/`.act-h-xl`/`.act-h-sm` en flex à ratio (`flex:1.4`/`2.4`/`1.1`, `min-width:0`), qui se comprimaient sous leur largeur de contenu sur petit écran — le texte du label débordait alors visuellement de sa boîte plutôt que de wrapper (à cause de `white-space:nowrap` sur `.ah-label`). Correctif : sous `max-width:700px`, chaque bouton passe en `flex:0 0 auto;min-width:56px` (taille pilotée par son propre contenu, jamais compressée), et `.ml-actions` devient scrollable horizontalement (`overflow-x:auto` + indice visuel de scroll, même pattern que STORY-18).
+
+**Fix 2 — bloc équipes/timer trop haut, terrain repoussé hors écran** : sous `max-width:700px and orientation:portrait` (nouveau, pour ne pas toucher l'iPad portrait), condensation du padding/font-size de `.ml-team`, `.ml-timer` et `.mlt-poss-btn` (score 52px→32px, chrono 38px→28px, etc.), en gardant `.mlt-poss-btn` ≥44px de hauteur (le `min-height:44px` existant n'a pas été touché). Hauteur mesurée de `.ml-left` : 541px sur un viewport de 844px de haut — le terrain redevient atteignable après un scroll raisonnable, au lieu d'être totalement hors-champ comme avant.
+
+**Fichiers modifiés** : `style.css` (un bloc ajouté après la règle portrait existante), `sw.js` (v48→v49). **`app.js` non touché**, conforme à la décision Architecte.
+
+**Vérification faite** (Chrome headless piloté via CDP, données réalistes injectées) :
+- `docs/design/screenshots/15-story02-final-portrait.png` — plus de chevauchement visible.
+- Mesure DOM automatisée : aucune paire de `.act-h` ne se chevauche (`overlap:false`), largeurs entre 56px et 112px selon le label, hauteur uniforme 71px — tout au-dessus du seuil de 44px.
+- `docs/design/screenshots/16-story02-final-scrolled.png` — après scroll, les 6 boutons (BUT/TIR ARRÊTÉ/TIR NON CADRÉ/PB/PO/JET FRANC) sont tous atteignables et lisibles.
+- `docs/design/screenshots/14-story02-ipad-landscape-noregress.png` — capture identique à la référence d'avant fix, media queries scoping bien étanche au-dessus de 700px.
+
+**Point d'attention pour le Code Reviewer/QA — trouvaille hors scope, non corrigée ici** : en testant à 390px de large avec un effectif complet (22 joueurs sélectionnés), les étiquettes des joueurs sur le terrain (`.cp-player`) se chevauchent visuellement entre elles (ex. "Timéo"/"Gabriel"/"Simon" bunched together) — confirmé comme un vrai problème de largeur (absent sur la même donnée à 1024px, `docs/design/screenshots/14-story02-ipad-landscape-noregress.png`), pas un artefact du jeu de données de test. **Hors du périmètre de cette story** (`Zone concernée` ne couvrait que `.match-layout`/`.ml-left`/`.ml-right`/`.ml-actions`/`.act-h`, pas `.court-pick`/`.cp-player`). À remonter au Scrum Master comme candidate à une nouvelle story.
