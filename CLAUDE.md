@@ -9,7 +9,7 @@ Responsable : Romain, responsable du centre de formation (CF).
 - **3 fichiers séparés** — index.html (shell), style.css, app.js
 - **Vanilla JS** — pas de framework (React, Vue, etc.)
 - **IndexedDB** pour le stockage local des matchs
-- **PWA** avec `sw.js` (service worker v26) et `manifest.json` pour le mode hors-ligne
+- **PWA** avec `sw.js` (service worker v51) et `manifest.json` pour le mode hors-ligne
 - **Hébergé sur Netlify** : fenix-statscf.netlify.app
 - **jsPDF** chargé via CDN pour l'export PDF
 
@@ -17,15 +17,15 @@ Responsable : Romain, responsable du centre de formation (CF).
 ```
 fenix/
 ├── index.html      ← shell HTML (~20 lignes)
-├── style.css       ← tout le CSS (~271 lignes)
-├── app.js          ← toute la logique JS (~3718 lignes)
-├── sw.js           ← service worker (cache v26 : index + style + app)
+├── style.css       ← tout le CSS (~497 lignes)
+├── app.js          ← toute la logique JS (~3848 lignes)
+├── sw.js           ← service worker (cache v51 : index + style + app)
 └── manifest.json   ← config PWA
 ```
 
 ## Design & UI
-- **Dark theme** exclusivement — couleurs : `--bg: #0D1B2A`, `--card: #1A2840`, `--fenix-sky: #7BA7C2`
-- Vert (`#50C878`) = FENIX/buts, Rouge (`#E8465A`) = adversaire/arrêts, Orange = hors cadre, Jaune = PD/penaltys
+- **Dark theme** exclusivement — couleurs : `--bg: #0F1923`, `--card: rgba(255,255,255,.04)`, `--fenix-sky: #5FA8D3`
+- Bleu ciel FENIX (`--fenix-sky`/`--green`, toutes deux `#5FA8D3` — il n'y a plus de vert distinct) = FENIX/buts, Rouge (`#E8465A`) = adversaire/arrêts, Orange (`#E88A4E`) = hors cadre, Jaune (`#F0C75E`) = PD/pénaltys/TM, Violet (`#9B7ECF`) = Jet franc
 - **Optimisé iPad** : gros boutons, texte lisible, mode paysage et portrait
 - Image du terrain et logo FENIX embarqués en base64 dans le HTML
 - Police par défaut du système, pas de font externe
@@ -35,10 +35,10 @@ fenix/
 ### Match (prise de stats en direct)
 - **Scoreboard** avec timer, score, sélecteur de GB pour chaque équipe
 - **Barre d'actions** : But, Tir arrêté, Tir non cadré, PB, PO, PEN, Jet franc, 2min, Carton R, TM
-- **Workflow d'action** : sélectionne action → clique équipe → terrain joueurs (tireur) → terrain impact (localisation) + zone de but (9 zones) → valider
-- **PB, PO, Jet franc** : même workflow mais sans zone de but, auto-validation au clic terrain
-- **PEN** : popup avec 3 choix (But / Arrêté / Hors cadre) puis terrain + zone impact
-- **PD (passe décisive)** : 2e clic joueur après tireur = PD
+- **Workflow d'action** : sélectionne action → clique joueur sur le terrain (équipe déterminée par le toggle POSSESSION) → terrain impact (localisation) + zone de but (9 zones) → auto-validation. Pas d'étape "clique équipe" séparée.
+- **PB, PO, Jet franc** : auto-validation immédiate dès le clic sur le joueur — pas de terrain d'impact ni de zone de but pour ces 3 actions (`x`/`y` restent `null`).
+- **PO (PEN_OBT) active un mode pénalty** (`S.penMode`) : le clic joueur suivant sur BUT/Tir arrêté/Tir non cadré se convertit automatiquement en PEN_GOAL/PEN_SAVE/PEN_OFF (position fixe, validation immédiate). Pas de popup à 3 choix.
+- **PD (passe décisive)** : bouton dédié **"🎯 PD"** qui apparaît après un but, ouvre un sélecteur de joueur sur le terrain pour assigner l'assist rétroactivement au dernier événement — ce n'est pas un 2e clic pendant la saisie du tir (un 2e clic joueur à ce moment-là remplace le tireur).
 - **Auto-validation** : quand on sélectionne une nouvelle action, l'action en cours est validée automatiquement
 - **Bouton ✓ VALIDER** : gros bouton vert à droite du terrain d'impact
 - **Feed d'événements** : overlay glissant, cliquable pour éditer
@@ -123,9 +123,8 @@ TM:       { needsMap:false, isTM:true }
 ## Déploiement
 1. Modifier `style.css` et/ou `app.js`
 2. Incrémenter la version dans `sw.js` (ex: `fenix-stats-vXX`)
-3. Zip le dossier fenix/ avec les 5 fichiers (index.html, style.css, app.js, sw.js, manifest.json)
-4. Glisser le dossier sur Netlify (app.netlify.com → Deploys → drag & drop)
-5. Fermer Safari complètement sur iPad → réouvrir pour forcer le nouveau SW
+3. `git add` + `git commit` + `git push` — Netlify redéploie automatiquement depuis GitHub (plus de zip/drag & drop manuel)
+4. Fermer Safari complètement sur iPad → réouvrir pour forcer le nouveau SW
 
 ## Règles importantes
 - **TOUJOURS** vérifier le JS avec `new Function()` avant de livrer
@@ -133,6 +132,22 @@ TM:       { needsMap:false, isTM:true }
 - **Modifications logique** → dans `app.js` uniquement
 - **TOUJOURS** tester les modifications sur iPad Safari (scrolling, touch, 100dvh)
 - Les noms de joueurs sur le terrain doivent être **gros** (22px numéro, 16px nom)
-- La zone de but (goal zone grid) ne s'affiche PAS pour PB, PO, Jet franc
-- Le terrain d'impact s'affiche pour TOUTES les actions sauf 2min, Carton R et TM
+- Ni le terrain d'impact ni la zone de but ne s'affichent pour PB, PO, Jet franc (auto-validation dès le clic joueur)
+- Le terrain d'impact + la zone de but s'affichent uniquement pour But, Tir arrêté, Tir non cadré (et leurs variantes pénalty)
 - Les stats pen s'affichent en format `arrêts/total` (ex: `3/5`) pas en colonnes séparées
+
+## État d'avancement
+
+### Livré et déployé
+- **STORY-18** — Navigation du header inaccessible sur iPhone (corrigé, scroll horizontal + logo condensé sous 700px)
+- **STORY-02** — Layout Match iPhone portrait (corrigé, actions/score/terrain sans chevauchement)
+- **STORY-03** — Layout Match iPhone paysage (corrigé, chrono/actions visibles, terrain agrandi)
+- **STORY-09** — Audit du workflow de saisie par clics réels : aucune friction de code trouvée
+
+### Connu, pas encore corrigé
+- Chevauchement des étiquettes joueurs sur le terrain (`.cp-player`) à largeur réduite avec un effectif complet sélectionné — pas encore de story dédiée
+
+## Décisions en attente / Roadmap
+
+- **Chantier Supabase cadré, pas développé** : passage d'un stockage 100% local à un stockage partagé Supabase pour permettre la saisie par un aidant occasionnel sur un autre appareil. Voir `docs/architecture-supabase.md`, `docs/prd-v2-cloud-multiuser.md`, stories `STORY-10` à `STORY-17`. Point de vigilance sécurité déjà identifié : désactiver l'inscription publique + activer RLS avant toute donnée réelle (voir `docs/security/supabase-multiuser.md`).
+- **Polish visuel transverse (STORY-04/05)** : étendre le traitement visuel déjà présent sur l'écran Match (ombres, états interactifs) aux écrans Stats/Bilan/Setup — pas encore développé.
