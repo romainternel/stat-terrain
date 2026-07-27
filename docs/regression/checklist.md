@@ -14,7 +14,7 @@
 | Mode hors-ligne (PWA/service worker) | historique | L'app fonctionne sans réseau après un premier chargement | Critique | Non re-vérifié dans ce cycle (cf. version SW bumpée à v48, à re-tester après un vrai déploiement) |
 | Layout Match iPad (paysage/portrait) | historique | Écran Match utilisable sans chevauchement | Critique | 2026-07-23 (capture `03-match-ipad-landscape.png`, avant le fix nav — non affecté par STORY-18) |
 | Layout Match iPhone portrait | STORY-02 | Actions/score/timer/terrain utilisables sans chevauchement, ≤430px portrait | Critique | 2026-07-27 (STORY-02, QA PASSED) |
-| Layout Match iPhone paysage | STORY-03 (non livrée) | Écran Match utilisable sans chevauchement sur iPhone paysage | Critique | ❌ Connu cassé actuellement — voir `docs/design/screenshots/05-match-iphone-landscape.png`. Ne pas cocher tant que STORY-03 n'est pas livrée. |
+| Layout Match iPhone paysage | STORY-03 | Score/timer/contrôles FENIX visibles sans scroll ; terrain agrandi (scroll encore nécessaire pour l'effectif complet, cf. QA-03) | Critique | 2026-07-27 (STORY-03, QA PASSED WITH NOTES — voir `docs/qa/QA-03-layout-match-iphone-paysage.md`) |
 | Navigation header sur iPhone (5 onglets atteignables) | STORY-18 | Tous les onglets atteignables sans être coupés hors écran, portrait et paysage | Critique | 2026-07-23 (STORY-18, QA PASSED) |
 
 ## Note du Regression Guardian

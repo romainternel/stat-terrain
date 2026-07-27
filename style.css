@@ -454,6 +454,26 @@ input{font-family:inherit;outline:none;}
   .ml-court{flex:1;min-height:0;overflow-y:auto;}
   .ml-bottom{flex-shrink:0;padding-bottom:10px;}
 }
+/* iPhone paysage (largeur réduite, hauteur courte) — condense colonne gauche + barre d'actions/contrôles pour rendre plus de hauteur au terrain, distinct du paysage iPad ci-dessus */
+@media (max-width:932px) and (orientation:landscape){
+  .ml-team{padding:6px 8px;}
+  .mlt-top{margin-bottom:2px;}
+  .mlt-score{font-size:30px;}
+  .mlt-gk{margin-bottom:2px;}
+  .ml-timer{padding:4px 6px;}
+  .ml-timer .timer-d{font-size:22px;}
+  .ml-timer .timer-btns{margin-top:3px;}
+  .mlt-poss-btn{margin-top:3px;padding:3px;}
+  .mlt-poss-btn .poss-icon{font-size:15px;}
+  .ml-left{gap:3px;}
+
+  .ml-actions{padding:4px;gap:3px;}
+  .act-h{padding:5px 3px;}
+  .ah-icon{font-size:16px;}
+  .ah-label{font-size:9px;}
+  .act-h-xl .ah-icon{font-size:20px;}
+  .act-h-xl .ah-label{font-size:10px;}
+}
 /* Portrait */
 @media (orientation:portrait){
   .match-layout{grid-template-columns:1fr;gap:6px;}
