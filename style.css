@@ -14,6 +14,10 @@
   --card-border: rgba(255,255,255,.14);
   --card-border-hover: rgba(255,255,255,.22);
   --card-bg: linear-gradient(160deg, rgba(255,255,255,.07) 0%, rgba(255,255,255,.025) 100%);
+  --court-fill: #0F1923;
+  --court-line: rgba(123,167,194,.55);
+  --court-line-dash: rgba(123,167,194,.35);
+  --court-goal: rgba(232,70,90,.6);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{background:linear-gradient(160deg,#0A1520 0%,#162030 55%,#0F1923 100%);color:var(--text);
@@ -286,6 +290,7 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 /* Court-based player select */
 .court-pick{position:relative;width:100%;aspect-ratio:350/240;background-size:100% 100%;
   border-radius:6px;overflow:visible;margin:2px 0;}
+.court-svg-bg{position:absolute;inset:0;width:100%;height:100%;z-index:0;border-radius:6px;overflow:hidden;}
 .cp-player{position:absolute;transform:translate(-50%,-50%);
   display:flex;flex-direction:row;align-items:center;gap:4px;
   padding:4px 8px;border-radius:7px;border:2px solid rgba(255,255,255,.3);

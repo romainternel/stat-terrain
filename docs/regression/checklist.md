@@ -21,6 +21,7 @@
 | États interactifs généralisés (active/focus) | STORY-05 | `.nav-b`/`.st-tab` réagissent au tap ; focus clavier visible ; `.act-h`/`.btn` du Match non affectés | Important | 2026-07-27 (STORY-05, QA PASSED — vérifié par vraies touches Tab, pas seulement `.focus()` programmatique) |
 | Terrain n'affiche que les joueurs sélectionnés | STORY-20 | Aucun joueur affiché (Match, PD, 2min/carton) tant qu'aucune sélection explicite n'a été faite ; sélection partielle respectée | Critique | 2026-07-28 (STORY-20, QA PASSED — 3 fonctions distinctes testées indépendamment) |
 | Numéro manquant affiché discrètement | STORY-21 | Tiret (pas "?") sur le terrain quand un joueur n'a pas de numéro ; `renderTeamSetup` non affecté | Secondaire | 2026-07-28 (STORY-21, QA PASSED) |
+| Terrain SVG (fond visuel Match/Stats/PD) | STORY-22 | Fond de terrain SVG sur les 7 emplacements (Match, Stats GB, mode tir, sélecteurs PD/2min), proportions 6m/9m/7m/4m, référentiel `viewBox 0 0 350 208` préservé | Important | 2026-07-28 (STORY-22, QA PASSED WITH NOTES — validation visuelle explicite de Romain en attente, voir `docs/qa/QA-22-refonte-svg-terrain.md`) |
 
 ## Note du Regression Guardian
 

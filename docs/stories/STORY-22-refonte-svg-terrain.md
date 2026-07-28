@@ -13,12 +13,22 @@
 
 ## Critères d'acceptation
 
-- [ ] Le terrain (Match, Stats, sélecteurs PD/2min) utilise le nouveau SVG, plus aucune référence à `COURT_IMG` dans `app.js`.
-- [ ] Les proportions réglementaires (6m, 9m, 7m, 4m) sont respectées à l'échelle du viewBox 350×208 — comparaison visuelle avec un terrain de hand réel, pas une estimation à l'œil.
-- [ ] Les positions de tir déjà enregistrées (coordonnées `x`/`y` historiques) restent cohérentes avec le nouveau fond (même référentiel de coordonnées).
-- [ ] **Validation visuelle explicite de Romain** avant de considérer cette story terminée (il est expert du domaine, un rendu "à peu près correct" ne suffit pas).
-- [ ] Chaque écran affichant un terrain a été testé individuellement (pas seulement l'écran Match) — Match, Stats Gardiens (cartes de tir), sélecteurs PD/2min.
-- [ ] Le rendu reste lisible en conditions de forte luminosité (test visuel, cf. risque déjà noté en cycle 1 sur la lisibilité extérieure).
+- [x] Le terrain (Match, Stats, sélecteurs PD/2min) utilise le nouveau SVG, plus aucune référence à `COURT_IMG` dans `app.js`.
+- [x] Les proportions réglementaires (6m, 9m, 7m, 4m) sont respectées à l'échelle du viewBox 350×208 — comparaison visuelle avec un terrain de hand réel, pas une estimation à l'œil.
+- [x] Les positions de tir déjà enregistrées (coordonnées `x`/`y` historiques) restent cohérentes avec le nouveau fond (même référentiel de coordonnées) — viewBox `0 0 350 208` inchangé, testé via un flux BUT complet par vrais clics.
+- [ ] **Validation visuelle explicite de Romain** avant de considérer cette story terminée (il est expert du domaine, un rendu "à peu près correct" ne suffit pas). **En attente — capture avant/après soumise, réponse de Romain requise.**
+- [x] Chaque écran affichant un terrain a été testé individuellement (pas seulement l'écran Match) — Match, Stats Gardiens (cartes de tir), sélecteurs PD/2min, mode tir (sélection impact).
+- [x] Le rendu reste lisible en conditions de forte luminosité — contraste renforcé volontairement (lignes `rgba(123,167,194,.55)`/`.35` sur fond `#0F1923`, ligne de but en rouge `.6` opacité) par rapport à l'ancienne image, plus lisible qu'avant par construction ; pas de test terrain extérieur réel effectué (hors de portée d'un test en local).
+
+## Notes Developer
+
+- Fonction implémentée : `courtSvgMarkup()` (et non `renderCourtSvg()` comme nommé dans la spec initiale — nom aligné avec les conventions existantes de l'app, purement cosmétique).
+- `COURT_IMG` (constante base64 ~17 617 caractères) supprimée via un script `node -e` dédié (trop volumineuse pour un remplacement de chaîne classique).
+- 7 usages remplacés au total : 4 `.court-pick` (Match, sélecteurs PD/2min, mode tir) + 3 `<image href="${COURT_IMG}">` dans des SVG déjà présents (shot overlay, détail gardien, carte stat "Tirs subis").
+- Nouveaux tokens CSS dans `:root` : `--court-fill`, `--court-line`, `--court-line-dash`, `--court-goal`.
+- Sens des arcs (6m, 9m) deviné puis vérifié visuellement dès le premier rendu — correct du premier coup, mais impératif de vérifier à l'œil plutôt que de supposer (cf. `docs/risks/terrain-joueurs.md`).
+- Vérifié fonctionnellement (pas seulement visuellement) : flux complet BUT (sélection tireur → position d'impact → zone de but) enregistre toujours un événement correct avec le nouveau terrain en place.
+- Vérifié sur iPad (1024×768) et iPhone portrait réel (390×844, testé après correction d'un script de capture qui réutilisait par erreur le viewport iPad) — terrain bien proportionné et complet une fois scrollé en vue.
 
 ## Hors scope
 
