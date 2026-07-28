@@ -19,6 +19,7 @@
 | Étiquettes joueurs sur le terrain lisibles (largeur réduite) | STORY-19 | Aucun chevauchement avec un effectif réel (plusieurs joueurs par position) ; effectif complet dégradé mais lisible | Critique | 2026-07-27 (STORY-19, QA PASSED WITH NOTES — zone tactile sous 44px, limite physique assumée, voir `docs/qa/QA-19-chevauchement-joueurs-terrain.md`) |
 | Cartes Stats/Bilan/Setup avec relief visuel | STORY-04 | `.card`/`.gk-stat` avec dégradé/bordure/ombre cohérents, sans régression de contraste | Important | 2026-07-27 (STORY-04, QA PASSED WITH NOTES — impact visuel confirmé mais jugé insuffisant à lui seul pour "ça claque", voir `docs/qa/QA-04-polish-tokens-ombres-cartes.md`) |
 | États interactifs généralisés (active/focus) | STORY-05 | `.nav-b`/`.st-tab` réagissent au tap ; focus clavier visible ; `.act-h`/`.btn` du Match non affectés | Important | 2026-07-27 (STORY-05, QA PASSED — vérifié par vraies touches Tab, pas seulement `.focus()` programmatique) |
+| Terrain n'affiche que les joueurs sélectionnés | STORY-20 | Aucun joueur affiché (Match, PD, 2min/carton) tant qu'aucune sélection explicite n'a été faite ; sélection partielle respectée | Critique | 2026-07-28 (STORY-20, QA PASSED — 3 fonctions distinctes testées indépendamment) |
 
 ## Note du Regression Guardian
 

@@ -1126,7 +1126,6 @@ function renderMatchPanel(){
   const isHome=team==="home";
   const accent=isHome?"var(--fenix-sky)":"var(--red)";
   let roster=S[team].players.filter(p=>p.selected);
-  if(roster.length===0) roster=S[team].players;
   const positioned=courtPlayerPositions(roster);
   const dn=(p)=>p.number?p.number:"?";
   const act=ap?ACTIONS[ap.type]:null;
@@ -1174,7 +1173,7 @@ function renderMatchPanel(){
   return `<div style="margin-top:2px;">
     ${statusHtml}
     <div class="court-pick" style="background-image:url('${COURT_IMG}');">
-      ${positioned.map(p=>{
+      ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>{
         const isSh=ap&&ap.shooterId===p.id;
         const clr=isSh?"var(--fenix-sky)":ap?accent:(S.selectedAction?accent:"var(--t3)");
         return `<div class="cp-player ${isSh?"shooter":""}" data-ap-player="${p.id}"
@@ -1547,7 +1546,6 @@ function renderPdSelect(){
   const isHome = team==="home";
   const accent = isHome?"var(--fenix-sky)":"var(--red)";
   let roster = S[team].players.filter(p=>p.selected);
-  if(roster.length===0) roster = S[team].players;
   // Exclude the scorer
   if(ev.playerId) roster = roster.filter(p=>p.id!==ev.playerId);
   const positioned = courtPlayerPositions(roster);
@@ -1559,7 +1557,7 @@ function renderPdSelect(){
       <h3>🎯 Passe décisive</h3>
       <div class="ps-sub">${a.icon} ${a.label} de ${pLabel} — Qui a fait la passe ?</div>
       <div class="court-pick" style="background-image:url('${COURT_IMG}');">
-        ${positioned.map(p=>`
+        ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>`
           <div class="cp-player" data-pick-pd="${p.id}"
                style="left:${p.cx}%;top:${p.cy}%;border-color:var(--yellow);">
             <div class="cp-num" style="color:var(--yellow)">${dn(p)}</div>
@@ -1577,6 +1575,14 @@ function renderPdSelect(){
 
 // ─── SHOT MAP OVERLAY ───
 // ─── PLAYER SELECT OVERLAY (COURT VIEW) ───
+function renderCourtEmptyState(){
+  return `<div class="court-empty-msg">
+    <div class="icon">👥</div>
+    <div>Aucun joueur sélectionné</div>
+    <div style="font-size:11px;">Va dans Équipes pour choisir ton effectif</div>
+  </div>`;
+}
+
 function courtPlayerPositions(roster){
   const groups={};
   roster.forEach(p=>{
@@ -1615,7 +1621,6 @@ function renderPlayerSelect(){
   const isHome=team==="home";
   const accent=isHome?"var(--fenix-sky)":"var(--red)";
   let roster = S[team].players.filter(p=>p.selected);
-  if(roster.length===0) roster = S[team].players;
   const positioned = courtPlayerPositions(roster);
   const dn=(p)=>p.number?p.number:"?";
 
@@ -1624,7 +1629,7 @@ function renderPlayerSelect(){
       <h3>${a.icon} ${a.label} — ${S[team].name}</h3>
       <div class="ps-sub">Sélectionne le joueur</div>
       <div class="court-pick" style="background-image:url('${COURT_IMG}');">
-        ${positioned.map(p=>`
+        ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>`
           <div class="cp-player" data-pick-player="${p.id}"
                style="left:${p.cx}%;top:${p.cy}%;border-color:${accent};">
             <div class="cp-num" style="color:${accent}">${dn(p)}</div>

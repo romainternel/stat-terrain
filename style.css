@@ -301,6 +301,14 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   .cp-player .cp-name{font-size:11px;max-width:15vw;}
 }
 
+.court-empty-msg{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;text-align:center;pointer-events:none;padding:16px;}
+.court-empty-msg > div{
+  background:rgba(15,25,35,.85);border-radius:var(--r2);padding:6px 14px;
+  color:rgba(255,255,255,.75);font-size:13px;}
+.court-empty-msg .icon{font-size:28px;background:none;padding:0;opacity:.6;}
+
 /* PD prompt after goal */
 .pd-prompt-box{background:#1A2840;border-radius:20px;padding:32px 24px;width:min(340px,88vw);
   border:2px solid var(--green);text-align:center;}
