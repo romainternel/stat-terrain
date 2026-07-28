@@ -38,6 +38,14 @@ Romain a signalé sur la v1 que la zone 6m et la ligne des 9m n'étaient pas de 
 - 9m : arcs rayon 157.5u depuis les mêmes centres, de (0,51.76)→(148.75,157.5) et (350,51.76)→(201.25,157.5) — les points de départ sont calculés par intersection cercle/ligne de touche (Pythagore), pas devinés.
 - Premier rendu du sweep-flag incorrect (arcs bulgeant vers l'intérieur, forme en "vallée" au lieu d'un dôme) — corrigé après vérification visuelle isolée du tracé SVG seul avant de re-tester dans le contexte complet de l'app.
 
+### Correction additionnelle : terrain trop grand sur PC (débordement vertical)
+
+Romain a signalé qu'sur PC (grand écran, orientation paysage) le terrain forçait un scroll — la page semblait "trop grande". Repro confirmée par test réel : `.court-pick` utilise `aspect-ratio:350/240` avec `width:100%`, donc sa hauteur est dérivée de la largeur disponible dans la colonne droite ; sur un écran large (1366 à 1920px), cette largeur est telle que la hauteur calculée (751 à 1131px) dépasse largement l'espace vertical réellement disponible dans `.ml-court` (qui, lui, est bien contraint en hauteur par la règle de layout paysage existante), d'où un scroll interne forcé pour voir tout le terrain.
+
+**Fix** : dans la media query paysage desktop/tablette (`orientation:landscape and min-width:700px`), le terrain est maintenant dimensionné par la **hauteur** disponible plutôt que par la largeur (`.court-pick{flex:1;min-height:0;width:auto;max-width:100%}`), avec `aspect-ratio` qui dérive la largeur — équivalent à un `object-fit:contain`. Plus aucun débordement testé à 1366×768, 1440×900, 1920×1080.
+
+**Effet de bord détecté et corrigé** : ce changement s'applique aussi à l'iPhone en paysage (844×390, même media query car `min-width:700px` matche), où il a d'abord cassé l'affichage — le terrain redimensionné par la hauteur devenait trop étroit et les étiquettes joueurs débordaient de son cadre. Comme l'iPhone paysage a sa propre media query plus spécifique (`max-width:932px and orientation:landscape`), le comportement d'origine (dimensionnement par la largeur + scroll, déjà validé en STORY-03) y a été explicitement restauré. iPad paysage (1024×768, hors de cette media query plus étroite) bénéficie bien du nouveau comportement sans régression.
+
 ## Hors scope
 
 - Le comportement de sélection des joueurs (traité dans STORY-20).

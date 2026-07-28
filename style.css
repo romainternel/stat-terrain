@@ -486,7 +486,9 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   .ml-right{height:100%;overflow:hidden;}
   .ml-actions{flex-shrink:0;}
   .ml-status{flex-shrink:0;}
-  .ml-court{flex:1;min-height:0;overflow-y:auto;}
+  .ml-court{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;}
+  .ml-court > div{display:flex;flex-direction:column;flex:1;min-height:0;}
+  .ml-court .court-pick{width:auto;flex:1;min-height:0;max-width:100%;margin:0 auto;}
   .ml-bottom{flex-shrink:0;padding-bottom:10px;}
 }
 /* iPhone paysage (largeur réduite, hauteur courte) — condense colonne gauche + barre d'actions/contrôles pour rendre plus de hauteur au terrain, distinct du paysage iPad ci-dessus */
@@ -508,6 +510,12 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   .ah-label{font-size:9px;}
   .act-h-xl .ah-icon{font-size:20px;}
   .act-h-xl .ah-label{font-size:10px;}
+
+  /* Écran trop court pour dimensionner le terrain par la hauteur (cf. règle
+     générale ci-dessus) : les étiquettes joueurs déborderaient d'un terrain
+     trop étroit. On revient au dimensionnement par la largeur + scroll. */
+  .ml-court > div{flex:none;}
+  .ml-court .court-pick{width:100%;height:auto;flex:none;max-width:none;margin:0;}
 }
 /* Portrait */
 @media (orientation:portrait){
