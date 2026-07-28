@@ -20,6 +20,7 @@
 | Cartes Stats/Bilan/Setup avec relief visuel | STORY-04 | `.card`/`.gk-stat` avec dégradé/bordure/ombre cohérents, sans régression de contraste | Important | 2026-07-27 (STORY-04, QA PASSED WITH NOTES — impact visuel confirmé mais jugé insuffisant à lui seul pour "ça claque", voir `docs/qa/QA-04-polish-tokens-ombres-cartes.md`) |
 | États interactifs généralisés (active/focus) | STORY-05 | `.nav-b`/`.st-tab` réagissent au tap ; focus clavier visible ; `.act-h`/`.btn` du Match non affectés | Important | 2026-07-27 (STORY-05, QA PASSED — vérifié par vraies touches Tab, pas seulement `.focus()` programmatique) |
 | Terrain n'affiche que les joueurs sélectionnés | STORY-20 | Aucun joueur affiché (Match, PD, 2min/carton) tant qu'aucune sélection explicite n'a été faite ; sélection partielle respectée | Critique | 2026-07-28 (STORY-20, QA PASSED — 3 fonctions distinctes testées indépendamment) |
+| Numéro manquant affiché discrètement | STORY-21 | Tiret (pas "?") sur le terrain quand un joueur n'a pas de numéro ; `renderTeamSetup` non affecté | Secondaire | 2026-07-28 (STORY-21, QA PASSED) |
 
 ## Note du Regression Guardian
 

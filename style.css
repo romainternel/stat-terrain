@@ -293,6 +293,7 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   transition:all .12s;z-index:1;white-space:nowrap;}
 .cp-player:active{transform:translate(-50%,-50%) scale(.90);background:rgba(123,167,194,.25);}
 .cp-player .cp-num{font-size:22px;font-weight:800;line-height:1;}
+.cp-player .cp-num.cp-num-missing{opacity:.4;font-weight:400;}
 .cp-player .cp-name{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;color:var(--t2);line-height:1;}
 
 @media(max-width:700px){

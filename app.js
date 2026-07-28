@@ -1127,7 +1127,6 @@ function renderMatchPanel(){
   const accent=isHome?"var(--fenix-sky)":"var(--red)";
   let roster=S[team].players.filter(p=>p.selected);
   const positioned=courtPlayerPositions(roster);
-  const dn=(p)=>p.number?p.number:"?";
   const act=ap?ACTIONS[ap.type]:null;
   const shooter=ap&&ap.shooterId?S[team].players.find(p=>p.id===ap.shooterId):null;
 
@@ -1178,7 +1177,7 @@ function renderMatchPanel(){
         const clr=isSh?"var(--fenix-sky)":ap?accent:(S.selectedAction?accent:"var(--t3)");
         return `<div class="cp-player ${isSh?"shooter":""}" data-ap-player="${p.id}"
              style="left:${p.cx}%;top:${p.cy}%;border-color:${clr};${!ap&&!S.selectedAction?"opacity:.45;":""}">
-          <div class="cp-num" style="color:${clr}">${dn(p)}</div>
+          <div class="cp-num ${p.number?"":"cp-num-missing"}" style="color:${clr}">${displayNumber(p)}</div>
           <div class="cp-name">${p.name}</div>
         </div>`;
       }).join("")}
@@ -1549,7 +1548,6 @@ function renderPdSelect(){
   // Exclude the scorer
   if(ev.playerId) roster = roster.filter(p=>p.id!==ev.playerId);
   const positioned = courtPlayerPositions(roster);
-  const dn=(p)=>p.number?p.number:"?";
   const a = ACTIONS[ev.type];
   const pLabel = ev.playerNumber ? `#${ev.playerNumber} ${ev.playerName||""}` : (ev.playerName||"");
   return `<div class="ps-overlay" id="pd-overlay">
@@ -1560,7 +1558,7 @@ function renderPdSelect(){
         ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>`
           <div class="cp-player" data-pick-pd="${p.id}"
                style="left:${p.cx}%;top:${p.cy}%;border-color:var(--yellow);">
-            <div class="cp-num" style="color:var(--yellow)">${dn(p)}</div>
+            <div class="cp-num ${p.number?"":"cp-num-missing"}" style="color:var(--yellow)">${displayNumber(p)}</div>
             <div class="cp-name">${p.name}</div>
           </div>
         `).join("")}
@@ -1582,6 +1580,8 @@ function renderCourtEmptyState(){
     <div style="font-size:11px;">Va dans Équipes pour choisir ton effectif</div>
   </div>`;
 }
+
+function displayNumber(p){ return p.number ? p.number : "–"; }
 
 function courtPlayerPositions(roster){
   const groups={};
@@ -1622,7 +1622,6 @@ function renderPlayerSelect(){
   const accent=isHome?"var(--fenix-sky)":"var(--red)";
   let roster = S[team].players.filter(p=>p.selected);
   const positioned = courtPlayerPositions(roster);
-  const dn=(p)=>p.number?p.number:"?";
 
   return `<div class="ps-overlay" id="ps-overlay">
     <div class="ps-modal" style="width:min(900px,98vw);">
@@ -1632,7 +1631,7 @@ function renderPlayerSelect(){
         ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>`
           <div class="cp-player" data-pick-player="${p.id}"
                style="left:${p.cx}%;top:${p.cy}%;border-color:${accent};">
-            <div class="cp-num" style="color:${accent}">${dn(p)}</div>
+            <div class="cp-num ${p.number?"":"cp-num-missing"}" style="color:${accent}">${displayNumber(p)}</div>
             <div class="cp-name">${p.name}</div>
           </div>
         `).join("")}
