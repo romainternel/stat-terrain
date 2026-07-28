@@ -1579,6 +1579,11 @@ function renderPdSelect(){
 // Référentiel conservé : viewBox 0 0 350 208, identique à l'ancien système de
 // coordonnées x/y des événements déjà enregistrés. Échelle ~17.5 unités/mètre
 // (350 unités = 20m de large), but en haut (y=0).
+// Géométrie officielle : la zone (6m) et la ligne des 9m ne sont PAS des
+// demi-cercles centrés sur le milieu du but — ce sont deux quarts de cercle
+// centrés sur chaque poteau (rayon 6m / 9m), reliés par un segment droit de
+// la largeur du but. Le rayon 9m dépasse la distance poteau→ligne de touche,
+// donc l'arc des 9m rejoint la ligne de touche, pas la ligne de but.
 function courtSvgMarkup(){
   return `
     <rect x="0" y="0" width="350" height="208" fill="var(--court-fill)"/>
@@ -1586,8 +1591,8 @@ function courtSvgMarkup(){
     <line x1="0" y1="1" x2="0" y2="208" stroke="var(--court-line)" stroke-width="1" opacity=".5"/>
     <line x1="350" y1="1" x2="350" y2="208" stroke="var(--court-line)" stroke-width="1" opacity=".5"/>
     <line x1="175" y1="0" x2="175" y2="208" stroke="var(--court-line)" stroke-width="1" stroke-dasharray="2,3" opacity=".4"/>
-    <path d="M 70,1 A 105,105 0 0 0 280,1" fill="none" stroke="var(--court-line)" stroke-width="1.5"/>
-    <path d="M 17.5,1 A 157.5,157.5 0 0 0 332.5,1" fill="none" stroke="var(--court-line-dash)" stroke-width="1.5" stroke-dasharray="5,4"/>
+    <path d="M 43.75,1 A 105,105 0 0 0 148.75,105 L 201.25,105 A 105,105 0 0 0 306.25,1" fill="none" stroke="var(--court-line)" stroke-width="1.5"/>
+    <path d="M 0,51.76 A 157.5,157.5 0 0 0 148.75,157.5 L 201.25,157.5 A 157.5,157.5 0 0 0 350,51.76" fill="none" stroke="var(--court-line-dash)" stroke-width="1.5" stroke-dasharray="5,4"/>
     <line x1="168" y1="122.5" x2="182" y2="122.5" stroke="var(--court-line)" stroke-width="2"/>
     <line x1="170" y1="70" x2="180" y2="70" stroke="var(--court-line)" stroke-width="2"/>
     <line x1="148.75" y1="1" x2="201.25" y2="1" stroke="var(--court-goal)" stroke-width="3"/>
