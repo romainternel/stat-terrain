@@ -16,7 +16,7 @@
 - [x] Le terrain (Match, Stats, sélecteurs PD/2min) utilise le nouveau SVG, plus aucune référence à `COURT_IMG` dans `app.js`.
 - [x] Les proportions réglementaires (6m, 9m, 7m, 4m) sont respectées à l'échelle du viewBox 350×208 — comparaison visuelle avec un terrain de hand réel, pas une estimation à l'œil.
 - [x] Les positions de tir déjà enregistrées (coordonnées `x`/`y` historiques) restent cohérentes avec le nouveau fond (même référentiel de coordonnées) — viewBox `0 0 350 208` inchangé, testé via un flux BUT complet par vrais clics.
-- [ ] **Validation visuelle explicite de Romain** avant de considérer cette story terminée (il est expert du domaine, un rendu "à peu près correct" ne suffit pas). **En attente — v2 (géométrie corrigée) soumise après retour de Romain sur v1, réponse requise.**
+- [x] **Validation visuelle explicite de Romain** avant de considérer cette story terminée (il est expert du domaine, un rendu "à peu près correct" ne suffit pas). **Validé le 2026-07-28 ("correct") après correction de la géométrie 6m/9m (v1→v2).**
 - [x] Chaque écran affichant un terrain a été testé individuellement (pas seulement l'écran Match) — Match, Stats Gardiens (cartes de tir), sélecteurs PD/2min, mode tir (sélection impact).
 - [x] Le rendu reste lisible en conditions de forte luminosité — contraste renforcé volontairement (lignes `rgba(123,167,194,.55)`/`.35` sur fond `#0F1923`, ligne de but en rouge `.6` opacité) par rapport à l'ancienne image, plus lisible qu'avant par construction ; pas de test terrain extérieur réel effectué (hors de portée d'un test en local).
 
