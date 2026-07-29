@@ -9,7 +9,7 @@ Tests réels via CDP — vrais clics et vraie saisie clavier (`Input.dispatchKey
 |---|---|---|
 | Écran à un seul champ + bouton "Entrer" avant l'app | ✅ | Vérifié : sans session, `.access-screen` s'affiche, `.match-layout`/`.setup-grid` absents du DOM |
 | Mauvais mot de passe → erreur claire | ✅ | Testé avec un mauvais mot de passe réel contre le vrai projet : `"Code d'accès incorrect."` affiché, pas d'ambiguïté possible (un seul champ existe) |
-| Persistance de session (pas de redemande à chaque ouverture), testée sur iPad/iPhone Safari réel | ⚠️ **Non vérifiable par le QA** | Nécessite les vrais identifiants du compte partagé, connus uniquement de Romain, et un vrai appareil iOS (fermeture complète de Safari). Mécanisme sous-jacent (persistance `localStorage` par `supabase-js`) est le comportement standard de la librairie, non modifié par ce code — mais **ce n'est pas la même chose que vérifié concrètement**. Recommandation : Romain doit faire ce test lui-même avant de considérer STORY-11 totalement terminée, cf. section dédiée dans la story. |
+| Persistance de session (pas de redemande à chaque ouverture), testée sur iPad/iPhone Safari réel | ✅ **Validé par Romain** | Testé sur son propre appareil (fermeture complète de Safari, réouverture) — session toujours active, pas de redemande du code d'accès. |
 | Déconnexion explicite disponible dans les réglages | ✅ | Bouton "🔒 Se déconnecter" présent dans le panneau Réglages du Match (uniquement si Supabase configuré), testé : ramène bien à l'écran d'accès après confirmation |
 
 ## Cas limites testés
@@ -23,6 +23,6 @@ Aucun.
 Aucune. Le reste de l'app (Match, Stats, Équipes, Bilan) fonctionne normalement une fois l'accès autorisé — vérifié en forçant `S.authOk=true` puis en naviguant entre écrans.
 
 ## Verdict
-**PASSED WITH NOTES**
+**PASSED**
 
-Tous les critères vérifiables par le QA sont satisfaits. Un critère (persistance de session testée sur vrai appareil iOS avec vrais identifiants) reste explicitement en attente de vérification par Romain — ce n'est pas un échec, c'est un test qui nécessite un accès que le QA n'a pas et ne doit pas demander (mot de passe du compte partagé).
+Tous les critères d'acceptation sont satisfaits, y compris la persistance de session validée par Romain sur son propre appareil réel.

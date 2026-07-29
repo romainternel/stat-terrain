@@ -15,7 +15,7 @@
 
 - [x] Un écran avec un seul champ (mot de passe) et un bouton "Entrer" s'affiche avant d'accéder à l'app.
 - [x] Un mauvais mot de passe affiche une erreur claire ("Code d'accès incorrect.") — pas d'ambiguïté possible sur "email ou mot de passe" puisque l'email n'est ni visible ni saisissable (un seul champ existe).
-- [ ] **Non vérifié dans cette story** : "une fois connecté, l'app ne redemande pas le mot de passe à chaque ouverture", testé concrètement sur iPad/iPhone Safari (fermeture complète puis réouverture). Nécessite les vrais identifiants du compte partagé (connus seulement de Romain) — à valider par Romain lui-même une fois déployé, cf. section dédiée ci-dessous.
+- [x] Une fois connecté, l'app ne redemande pas le mot de passe à chaque ouverture — **validé par Romain sur son propre appareil réel** (fermeture complète de Safari puis réouverture, session toujours active).
 - [x] Un moyen de se déconnecter explicitement existe (panneau Réglages du Match, bouton "🔒 Se déconnecter", visible uniquement si Supabase est configuré) — testé, ramène bien à l'écran d'accès.
 
 ## Hors scope
