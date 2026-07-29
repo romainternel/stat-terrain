@@ -638,6 +638,29 @@ function recordEvent(type, team, x, y, playerId){
   R();
 }
 
+function renderMatchSimple(){
+  const simpleBtn=(team,type,label,icon,accent)=>`
+    <button class="act-h" data-simple="${team}|${type}" style="flex:1;">
+      <span class="ah-icon" style="color:${accent}">${icon}</span>
+      <span class="ah-label" style="color:${accent}">${label}</span>
+    </button>`;
+  const teamRow=(team,accent,name)=>`
+    <div>
+      <div style="font-size:11px;font-weight:700;color:${accent};text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${name}</div>
+      <div style="display:flex;gap:5px;">
+        ${simpleBtn(team,"GOAL","BUT","⚽",accent)}
+        ${simpleBtn(team,"SAVE","ARRÊT","🧤",accent)}
+        ${simpleBtn(team,"OFF","NON CADRÉ","↗",accent)}
+      </div>
+    </div>`;
+  return `
+    <div style="background:rgba(240,199,94,.12);border:1.5px solid var(--yellow);border-radius:6px;padding:5px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--yellow);letter-spacing:.06em;margin-bottom:10px;">⚡ MODE SIMPLE ACTIF</div>
+    ${teamRow("home","var(--fenix-sky)",S.home.name)}
+    <div style="height:10px;"></div>
+    ${teamRow("away","var(--red)",S.away.name)}
+  `;
+}
+
 function undoLast(){
   if(S.events.length===0) return;
   if(S.events[0]?.type==='PEN_OBT') S.penMode=false;
@@ -1294,7 +1317,7 @@ function renderMatch(){
   };
 
   let pdBtnHtml="";
-  if(S.events.length>0&&!S.actionPanel){
+  if(S.mode==="expert"&&S.events.length>0&&!S.actionPanel){
     const ev=S.events[0]; const hasPd=!!ev.assistName;
     pdBtnHtml=`<button id="pd-btn" class="ml-ctrl-btn" style="border-color:${hasPd?"var(--yellow)":"var(--border)"};color:${hasPd?"var(--yellow)":"var(--t2)"};">${hasPd?"✓ PD":"🎯 PD"}</button>`;
   }
@@ -1347,8 +1370,9 @@ function renderMatch(){
       </div>
     </div>
 
-    <!-- COLONNE DROITE: boutons + terrain -->
+    <!-- COLONNE DROITE: boutons + terrain (Expert) ou saisie rapide (Simple) -->
     <div class="ml-right">
+      ${S.mode==="simple" ? renderMatchSimple() : `
       <!-- Barre d'actions horizontale -->
       <div class="ml-actions">
         ${actBtn("GOAL","xl")}
@@ -1370,6 +1394,7 @@ function renderMatch(){
       <div class="ml-court">
         ${renderMatchPanel()}
       </div>
+      `}
       <!-- Contrôles bas -->
       <div class="ml-bottom">
         <button class="ml-ctrl-btn" id="toggle-feed" style="border-color:var(--fenix-sky);color:var(--fenix-sky);">⚡ <span class="mono" style="font-size:15px;font-weight:800;">${S.events.length}</span></button>
@@ -3112,6 +3137,11 @@ function bind(){
   }; });
   // Mode Simple/Expert toggle
   document.querySelectorAll("[data-mode]").forEach(el=>{ el.onclick=()=>{ setMode(el.dataset.mode); }; });
+  // Mode Simple: boutons de saisie rapide par équipe (auto-validation)
+  document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
+    const [team,type]=el.dataset.simple.split("|");
+    recordEvent(type,team);
+  }; });
   // Stats tabs
   document.querySelectorAll("[data-stab]").forEach(el=>{ el.onclick=()=>{S.statsTab=el.dataset.stab;R();}; });
   // Fullscreen card buttons
