@@ -108,6 +108,16 @@ function setMode(newMode){
   R();
 }
 
+// ─── Supabase (config isolée dans config.js, saisie partagée multi-appareil) ───
+let sbClient=null;
+function initSupabaseClient(){
+  if(sbClient) return sbClient;
+  if(typeof SUPABASE_URL==="undefined"||typeof supabase==="undefined") return null;
+  sbClient=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+  return sbClient;
+}
+initSupabaseClient();
+
 // ─── IndexedDB for match history ───
 const DB_NAME="fenix_stats"; const DB_VER=1; const STORE="matches";
 let db=null;

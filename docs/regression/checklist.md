@@ -26,6 +26,7 @@
 | Mode Simple/Expert : détection, persistance, garde-fou | STORY-23 | Première utilisation → détection par largeur d'écran (iPhone=Simple, sinon Expert) ; un choix explicite déjà enregistré n'est jamais réinitialisé ; toggle fonctionnel sur Équipes et panneau Réglages Match ; confirmation bloquante avant bascule Expert→Simple si des événements existent | Important | 2026-07-29 (STORY-23, QA PASSED) |
 | Écran Match en mode Simple (saisie rapide par équipe) | STORY-24 | BUT/ARRÊT/NON CADRÉ auto-valident sans terrain ni zone ; score et stats GB corrects ; 2min/Carton R/TM accessibles ; badge de mode visible en continu | Important | 2026-07-29 (STORY-24, QA PASSED) |
 | Carte joueur Équipes (sélection/suppression) | historique, polish STORY-25 | Sélection/désélection et suppression d'un joueur fonctionnelles ; badge numéro, accent d'équipe, état non-sélectionné lisible | Important | 2026-07-29 (STORY-25, QA PASSED — vérifié par vrais clics après le changement de markup) |
+| Fondation Supabase (config, sécurité) | STORY-10 | `config.js` chargé, client `sbClient` initialisé ; RLS activée + policies sur `matches`/`match_events` ; inscription publique désactivée ; requête sans authentification refusée | Critique | 2026-07-29 (STORY-10, QA PASSED — vérifié sur le vrai projet Supabase, pas seulement sur le papier, cf. `docs/security/supabase-project-live.md`) |
 
 ## Note du Regression Guardian
 
