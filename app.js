@@ -1082,24 +1082,25 @@ function renderTeamSetup(side){
   const t=S[side];
   const isHome=side==="home";
   const accent=isHome?"var(--green)":"var(--red)";
+  const accentRgb=isHome?"95,168,211":"232,70,90";
   const selCount = t.players.filter(p=>p.selected).length;
   const selClass = selCount===14?"full":selCount>14?"over":"ok";
-  const dn = (p) => p.number ? "#"+p.number+" " : "";
   return `<div class="card team-card">
     <input class="team-name-input" style="color:${accent}" value="${t.name}" data-team-name="${side}">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
       <div class="card-t" style="color:${accent};margin:0;">Effectif (${t.players.length})</div>
       <div class="sel-counter ${selClass}">🏟 Match : <strong>${selCount}</strong></div>
     </div>
-    <div>
+    <div style="--pc-accent:${accentRgb};">
       ${t.players.map(p=>`
-        <div class="player-card ${p.selected?"":"dimmed"}">
+        <div class="player-card ${p.selected?"selected":"dimmed"}">
           <div class="sel-toggle ${p.selected?"on":"off"}" data-sel-player="${side}|${p.id}">${p.selected?"✓":""}</div>
+          <div class="jersey">${displayNumber(p)}</div>
           <div class="info">
-            <div class="nm" style="cursor:pointer;" data-edit-player="${side}|${p.id}">${dn(p)}${p.name} ${p.name==="?"?`<span style="font-size:9px;color:var(--yellow);">✏️</span>`:""}</div>
+            <div class="nm" style="cursor:pointer;" data-edit-player="${side}|${p.id}">${p.name} ${p.name==="?"?`<span style="font-size:9px;color:var(--yellow);">✏️</span>`:""}</div>
             <div class="meta" style="cursor:pointer;" data-edit-pos="${side}|${p.id}">${POS_L[p.position]||p.position} ${p.position==="?"?`<span style="color:var(--yellow);">tap→poste</span>`:""}</div>
           </div>
-          ${p.position==="GB"?`<span class="gk-badge">GB</span>`:""}
+          ${p.position==="GB"?`<span class="gk-badge">🧤 GB</span>`:""}
           <div class="del-btn" data-del="${side}|${p.id}">✕</div>
         </div>
       `).join("")}
