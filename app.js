@@ -101,6 +101,7 @@ function freshState(){
     tmLastAlert:0, // timestamp of last TM suggestion to avoid spam
     settingsOpen:false,
     coachNotes:"", // coach analysis notes for the match
+    mode:"expert", // "simple" | "expert" — overwritten below from localStorage/device detection
   };
 }
 
@@ -119,9 +120,22 @@ try {
   });
 } catch(e){}
 try { S.savedMatches = JSON.parse(localStorage.getItem("hb2_matches"))||[]; } catch(e){}
+try {
+  const savedMode = localStorage.getItem("hb2_mode");
+  S.mode = (savedMode==="simple"||savedMode==="expert") ? savedMode : (window.innerWidth<700 ? "simple" : "expert");
+} catch(e){}
 
 function saveTeams(){ localStorage.setItem("hb2_teams",JSON.stringify({home:S.home,away:S.away})); }
 function saveMatches(){ localStorage.setItem("hb2_matches",JSON.stringify(S.savedMatches)); }
+function setMode(newMode){
+  if(newMode===S.mode) return;
+  if(S.mode==="expert" && newMode==="simple" && S.events.length>0){
+    if(!safeConfirm("Passer en mode Simple ? Les prochains événements seront saisis sans terrain ni zone, pour le reste du match.")) return;
+  }
+  S.mode=newMode;
+  localStorage.setItem("hb2_mode",S.mode);
+  R();
+}
 
 // ─── IndexedDB for match history ───
 const DB_NAME="fenix_stats"; const DB_VER=1; const STORE="matches";
@@ -1047,6 +1061,23 @@ function renderHeader(){
 }
 
 // ─── SETUP ───
+function renderModeToggle(){
+  const modes=[
+    {id:"simple",icon:"⚡",label:"SIMPLE",desc:"Score + buts rapide"},
+    {id:"expert",icon:"🎯",label:"EXPERT",desc:"Terrain, zones, PD, GB..."}
+  ];
+  return `<div style="margin-top:14px;padding:10px 16px;border-radius:10px;background:rgba(123,167,194,.04);border:1px solid rgba(123,167,194,.12);">
+    <div style="font-size:13px;color:var(--t2);font-weight:600;margin-bottom:8px;text-align:center;">🎚 Mode de saisie</div>
+    <div style="display:flex;gap:8px;">
+      ${modes.map(m=>`<button class="act-h ${S.mode===m.id?"selected":""}" data-mode="${m.id}" style="flex:1;">
+        <span class="ah-icon">${m.icon}</span>
+        <span class="ah-label">${m.label}</span>
+        <span style="font-size:11px;font-weight:500;color:var(--t3);">${m.desc}</span>
+      </button>`).join("")}
+    </div>
+  </div>`;
+}
+
 function renderSetup(){
   return `<div class="setup-grid">
     ${renderTeamSetup("home")}
@@ -1056,6 +1087,7 @@ function renderSetup(){
     <span style="font-size:13px;color:var(--t2);font-weight:600;">🧤 Suivi gardien & zones de tir</span>
     <button onclick="S.trackGK=!S.trackGK;R();" style="padding:4px 14px;border-radius:20px;border:1.5px solid ${S.trackGK?'var(--fenix-sky)':'var(--border)'};background:${S.trackGK?'rgba(123,167,194,.15)':'transparent'};color:${S.trackGK?'var(--fenix-sky)':'var(--t3)'};font-size:13px;font-weight:700;">${S.trackGK?'✓ Activé':'✗ Désactivé'}</button>
   </div>
+  ${renderModeToggle()}
   <div style="text-align:center;margin-top:10px;">
     <button class="btn btn-g" style="padding:12px 32px;font-size:14px;border-color:var(--fenix-sky);color:var(--fenix-sky);background:rgba(123,167,194,.08);" data-v="match">▶ Lancer le match</button>
   </div>`;
@@ -1279,6 +1311,10 @@ function renderMatch(){
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--fenix-sky);color:var(--fenix-sky);" id="export-match">📤 Exporter</button>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--yellow);color:var(--yellow);" id="import-match">📥 Importer</button>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--fenix-sky);color:var(--fenix-sky);" data-v="setup">✏️ Effectifs</button>
+    <div style="display:flex;gap:5px;margin-bottom:5px;">
+      <button class="btn btn-sm ${S.mode==="simple"?"btn-g":""}" style="flex:1;" data-mode="simple">⚡ Simple</button>
+      <button class="btn btn-sm ${S.mode==="expert"?"btn-g":""}" style="flex:1;" data-mode="expert">🎯 Expert</button>
+    </div>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;" id="new-btn">🆕 Nouveau match</button>
     <button class="btn btn-sm" style="width:100%;border-color:var(--border);color:var(--t3);" id="close-settings">✕ Fermer</button>
   </div>`:"";
@@ -3074,6 +3110,8 @@ function bind(){
     if(S.view==="history"||S.view==="bilan"){ try{S.matchHistory=await dbGetAll();}catch(e){S.matchHistory=[];} }
     R();
   }; });
+  // Mode Simple/Expert toggle
+  document.querySelectorAll("[data-mode]").forEach(el=>{ el.onclick=()=>{ setMode(el.dataset.mode); }; });
   // Stats tabs
   document.querySelectorAll("[data-stab]").forEach(el=>{ el.onclick=()=>{S.statsTab=el.dataset.stab;R();}; });
   // Fullscreen card buttons

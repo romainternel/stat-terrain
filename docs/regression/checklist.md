@@ -23,6 +23,7 @@
 | Numéro manquant affiché discrètement | STORY-21 | Tiret (pas "?") sur le terrain quand un joueur n'a pas de numéro ; `renderTeamSetup` non affecté | Secondaire | 2026-07-28 (STORY-21, QA PASSED) |
 | Terrain SVG (fond visuel Match/Stats/PD) | STORY-22 | Fond de terrain SVG sur les 7 emplacements (Match, Stats GB, mode tir, sélecteurs PD/2min), proportions 6m/9m/7m/4m, référentiel `viewBox 0 0 350 208` préservé | Important | 2026-07-28 (STORY-22, QA PASSED WITH NOTES — validation visuelle explicite de Romain en attente, voir `docs/qa/QA-22-refonte-svg-terrain.md`) |
 | Terrain dimensionné sans scroll forcé sur PC/tablette paysage | STORY-22 (correctif) | Sur écran large paysage (≥700px, hors iPhone paysage ≤932px), le terrain se dimensionne par la hauteur disponible, sans déborder le panneau ni forcer un scroll de page | Important | 2026-07-28 (testé 1366×768, 1440×900, 1920×1080, iPad paysage 1024×768 — aucun débordement ; iPhone paysage 844×390 restauré au comportement d'origine STORY-03 pour éviter un chevauchement d'étiquettes) |
+| Mode Simple/Expert : détection, persistance, garde-fou | STORY-23 | Première utilisation → détection par largeur d'écran (iPhone=Simple, sinon Expert) ; un choix explicite déjà enregistré n'est jamais réinitialisé ; toggle fonctionnel sur Équipes et panneau Réglages Match ; confirmation bloquante avant bascule Expert→Simple si des événements existent | Important | 2026-07-29 (STORY-23, QA PASSED) |
 
 ## Note du Regression Guardian
 
