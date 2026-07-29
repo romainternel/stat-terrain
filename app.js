@@ -73,6 +73,8 @@ function freshState(){
     settingsOpen:false,
     coachNotes:"", // coach analysis notes for the match
     mode:"expert", // "simple" | "expert" — overwritten below from localStorage/device detection
+    authOk:null, // null = vérification en cours, true = accès autorisé, false = écran d'accès affiché
+    authError:null, // message d'erreur affiché sur l'écran d'accès
   };
 }
 
@@ -117,6 +119,36 @@ function initSupabaseClient(){
   return sbClient;
 }
 initSupabaseClient();
+
+async function checkAuthSession(){
+  const client=initSupabaseClient();
+  if(!client){ S.authOk=true; R(); return; } // Supabase indisponible : ne jamais bloquer l'usage local
+  try{
+    const {data}=await client.auth.getSession();
+    S.authOk=!!(data&&data.session);
+  }catch(e){
+    S.authOk=true; // fail-open : jamais bloquer l'usage local sur une erreur réseau/API
+  }
+  R();
+}
+
+async function signInShared(password){
+  const client=initSupabaseClient();
+  if(!client){ S.authOk=true; R(); return; }
+  S.authError=null;
+  const {error}=await client.auth.signInWithPassword({email:SUPABASE_AUTH_EMAIL,password});
+  if(error){ S.authError="Code d'accès incorrect."; R(); return; }
+  S.authOk=true;
+  R();
+}
+
+async function signOutShared(){
+  const client=initSupabaseClient();
+  if(client){ try{ await client.auth.signOut(); }catch(e){} }
+  S.authOk=false;
+  S.authError=null;
+  R();
+}
 
 // ─── IndexedDB for match history ───
 const DB_NAME="fenix_stats"; const DB_VER=1; const STORE="matches";
@@ -1011,6 +1043,19 @@ function newMatch(){
 // ═══════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════
+function renderAccessScreen(){
+  return `<div class="access-screen">
+    <div class="access-card">
+      <div class="logo-i" style="width:56px;height:56px;margin:0 auto 14px;"><img src="${FENIX_LOGO}"></div>
+      <h1>CF FENIX STAT</h1>
+      <div class="access-label">Code d'accès</div>
+      <input type="password" id="access-password" class="access-input" autocomplete="current-password" placeholder="••••••••">
+      ${S.authError?`<div class="access-error">${S.authError}</div>`:""}
+      <button class="btn btn-g access-submit" id="access-submit">Entrer</button>
+    </div>
+  </div>`;
+}
+
 let _rafId=null;
 function R(){
   if(_rafId) return;
@@ -1020,6 +1065,20 @@ function R(){
     const scrollY=window.scrollY;
     const feed=app.querySelector(".feed");
     const feedScroll=feed?feed.scrollTop:0;
+
+    if(S.authOk===false){
+      const clone=app.cloneNode(false);
+      clone.innerHTML=renderAccessScreen();
+      app.parentNode.replaceChild(clone,app);
+      bind();
+      return;
+    }
+    if(S.authOk===null){
+      const clone=app.cloneNode(false);
+      clone.innerHTML="";
+      app.parentNode.replaceChild(clone,app);
+      return;
+    }
 
     let h = renderHeader();
     switch(S.view){
@@ -1311,6 +1370,7 @@ function renderMatch(){
       <button class="btn btn-sm ${S.mode==="expert"?"btn-g":""}" style="flex:1;" data-mode="expert">🎯 Expert</button>
     </div>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;" id="new-btn">🆕 Nouveau match</button>
+    ${sbClient?`<button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--red);color:var(--red);" id="sign-out-btn">🔒 Se déconnecter</button>`:""}
     <button class="btn btn-sm" style="width:100%;border-color:var(--border);color:var(--t3);" id="close-settings">✕ Fermer</button>
   </div>`:"";
 
@@ -3101,6 +3161,16 @@ function renderHistory(){
 // EVENT BINDING
 // ═══════════════════════════════════════════════════════
 function bind(){
+  // Écran d'accès partagé
+  const accessBtn=document.getElementById("access-submit");
+  if(accessBtn){
+    const pwInput=document.getElementById("access-password");
+    accessBtn.onclick=()=>{ if(pwInput.value) signInShared(pwInput.value); };
+    pwInput.onkeydown=(e)=>{ if(e.key==="Enter"&&pwInput.value) signInShared(pwInput.value); };
+    pwInput.focus();
+  }
+  const signOutBtn=document.getElementById("sign-out-btn");
+  if(signOutBtn) signOutBtn.onclick=()=>{ if(safeConfirm("Se déconnecter de l'accès partagé ?")) signOutShared(); };
   // Nav
   document.querySelectorAll("[data-v]").forEach(el=>{ el.onclick=async()=>{
     S.view=el.dataset.v;
@@ -3908,7 +3978,7 @@ function generatePDF(){
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
-R();
+checkAuthSession();
 
 // Register Service Worker for offline PWA
 if('serviceWorker' in navigator){

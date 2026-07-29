@@ -27,6 +27,7 @@
 | Écran Match en mode Simple (saisie rapide par équipe) | STORY-24 | BUT/ARRÊT/NON CADRÉ auto-valident sans terrain ni zone ; score et stats GB corrects ; 2min/Carton R/TM accessibles ; badge de mode visible en continu | Important | 2026-07-29 (STORY-24, QA PASSED) |
 | Carte joueur Équipes (sélection/suppression) | historique, polish STORY-25 | Sélection/désélection et suppression d'un joueur fonctionnelles ; badge numéro, accent d'équipe, état non-sélectionné lisible | Important | 2026-07-29 (STORY-25, QA PASSED — vérifié par vrais clics après le changement de markup) |
 | Fondation Supabase (config, sécurité) | STORY-10 | `config.js` chargé, client `sbClient` initialisé ; RLS activée + policies sur `matches`/`match_events` ; inscription publique désactivée ; requête sans authentification refusée | Critique | 2026-07-29 (STORY-10, QA PASSED — vérifié sur le vrai projet Supabase, pas seulement sur le papier, cf. `docs/security/supabase-project-live.md`) |
+| Écran d'accès partagé (gate de toute l'app) | STORY-11 | Sans session → écran d'accès, pas d'accès à l'app ; mauvais mot de passe → erreur claire ; déconnexion fonctionnelle ; fail-open si Supabase indisponible (jamais de blocage total de l'usage local) | Critique | 2026-07-29 (STORY-11, QA PASSED WITH NOTES — persistance de session sur vrai appareil iOS non vérifiable sans les vrais identifiants, à faire par Romain) |
 
 ## Note du Regression Guardian
 
