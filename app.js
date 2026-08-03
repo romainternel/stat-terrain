@@ -381,9 +381,14 @@ openDB().then(()=>migrateOldMatches());
 function parseCSVPlayers(text){
   const lines = text.trim().split("\n").filter(l=>l.trim());
   const players = [];
-  for(const line of lines){
+  lines.forEach((line,i)=>{
     const parts = line.split(/[,;\t]/).map(s=>s.trim());
-    if(parts.length<2) continue;
+    if(parts.length<2) return;
+    // Ignore une éventuelle ligne d'en-tête (ex: fichier ré-importé après un export "Numéro,Nom,Poste")
+    if(i===0){
+      const h=parts[0].toLowerCase();
+      if(h==="numéro"||h==="numero"||h==="nom"||h==="n°"||h==="no") return;
+    }
     let num="", name="", pos="DC";
     if(parts.length===2){
       name=parts[0]; pos=parts[1].toUpperCase();
@@ -392,8 +397,8 @@ function parseCSVPlayers(text){
       num=parts[0]; name=parts[1]; pos=(parts[2]||"DC").toUpperCase();
       if(!POSITIONS.includes(pos)){ pos="DC"; }
     }
-    players.push({id:gid(), name, number:num, position:pos, photo:null});
-  }
+    players.push({id:gid(), name:name||"?", number:num, position:pos, photo:null, selected:false});
+  });
   return players;
 }
 
