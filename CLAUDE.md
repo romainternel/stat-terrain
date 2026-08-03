@@ -6,23 +6,24 @@ Application de statistiques en direct pour le handball, développée pour le **C
 Responsable : Romain, responsable du centre de formation (CF).
 
 ## Architecture
-- **3 fichiers séparés** — index.html (shell), style.css, app.js
+- **4 fichiers séparés** — index.html (shell), style.css, app.js, config.js (identifiants Supabase, isolé pour permettre un clonage futur par un autre coach)
 - **Vanilla JS** — pas de framework (React, Vue, etc.)
-- **IndexedDB** pour le stockage local des matchs
-- **PWA** avec `sw.js` (service worker v60) et `manifest.json` pour le mode hors-ligne
+- **IndexedDB** pour le stockage local des matchs ET la file d'attente de synchronisation (outbox, voir section Stockage des données)
+- **PWA** avec `sw.js` (service worker v70) et `manifest.json` pour le mode hors-ligne
 - **Hébergé en double, en transition** :
   - Netlify (historique) : fenix-statscf.netlify.app
   - GitHub Pages (nouveau) : romainternel.github.io/stat-terrain/ — dépôt `romainternel/stat-terrain` (renommé depuis `appli-terrain`), **public** (nécessaire pour GitHub Pages gratuit)
   - Garder les deux actifs jusqu'à validation de GitHub Pages sur un vrai match (cache hors-ligne notamment), puis supprimer Netlify
-- **jsPDF** chargé via CDN pour l'export PDF
+- **jsPDF** et **supabase-js@2** (build UMD, jsdelivr) chargés via CDN, sans étape de build
 
 ## Fichiers
 ```
 fenix/
 ├── index.html      ← shell HTML (~20 lignes)
 ├── style.css       ← tout le CSS (~544 lignes)
-├── app.js          ← toute la logique JS (~3900 lignes)
-├── sw.js           ← service worker (cache v60 : index + style + app, chemins relatifs "./" pour fonctionner en sous-dossier)
+├── app.js          ← toute la logique JS (~4341 lignes)
+├── config.js       ← identifiants Supabase (SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_AUTH_EMAIL), jamais la clé service_role
+├── sw.js           ← service worker (cache v70 : index + style + app + config, chemins relatifs "./" pour fonctionner en sous-dossier)
 ├── manifest.json   ← config PWA (start_url/scope en "./", relatifs)
 └── .nojekyll       ← nécessaire pour GitHub Pages (sert les fichiers tels quels, sans traitement Jekyll)
 ```
@@ -90,6 +91,33 @@ fenix/
 - Photos joueurs (optionnel, base64)
 - Sélection du roster pour chaque match
 
+### Accès partagé & synchronisation multi-appareil (STORY-10 à 14)
+- Écran d'accès à mot de passe unique (`S.authOk`) devant toute l'app — email fixe (`config.js`), un seul compte Supabase, pas d'auto-inscription
+- **Fail-open volontaire** : si Supabase est indisponible/non configuré, `S.authOk` passe à `true` automatiquement — l'app reste utilisable en local
+- Chaque événement + l'état complet du match sont synchronisés en continu vers Supabase (voir "Stockage des données"), réception en temps réel sur les autres appareils
+- Un appareil peut reprendre un match en cours démarré par un autre appareil, avec reconstruction complète de l'état
+
+### Mode lecteur (STORY-26)
+- `S.readOnly`, persistant par appareil (`localStorage hb2_readonly`), bascule dans le panneau ⚙ Réglages du Match
+- Verrouille toute écriture locale (terrain, TM, sanctions, chrono, mi-temps, gardien, undo/delete/edit, PD, sauvegarde/nouveau match, import CSV) sans jamais bloquer la réception distante (sync entrante Supabase continue de fonctionner)
+- Hors scope volontaire : l'écran Équipes n'est pas verrouillé par ce mode
+- Signalé par un bandeau visuel + désaturation des contrôles d'écriture (`.match-layout.is-readonly`, `.feed-panel.is-readonly`)
+
+## Stockage des données
+
+### Local (par appareil)
+- **IndexedDB** (`fenix_stats`, `DB_VER=2`) : historique des matchs sauvegardés (store `matches`, fonctions `dbSaveMatch()`/`dbGetAll()`/`dbDelete()`) + file d'attente de synchronisation sortante (store `pendingSync`, voir ci-dessous)
+- **localStorage** : effectifs courants (`hb2_teams`), mode Simple/Expert (`hb2_mode`), mode lecteur (`hb2_readonly`), session Supabase (gérée automatiquement par `supabase-js`)
+
+### Partagé (Supabase, STORY-10 à 14)
+- Deux tables : `matches` (état complet du match — équipes, effectifs, gardiens, période, chrono, statut `in_progress`/`finished`) et `match_events` (un événement par ligne, colonnes snake_case miroir de la structure d'événement locale)
+- **RLS activée** sur les deux tables, policy `authenticated` en lecture/écriture — inscription publique désactivée, un seul compte partagé
+- **Realtime doit être activé séparément de RLS**, table par table (`alter publication supabase_realtime add table ...`, script `docs/supabase-realtime-setup.sql`) — sans cette étape, l'abonnement ne lève aucune erreur mais ne reçoit jamais rien (piège découvert pendant STORY-13)
+- Écriture : `queueEventForSync()` pousse dans l'outbox local puis vide la file vers `match_events` (upsert, idempotent par `id` uuid) dès que réseau + session sont disponibles ; `upsertMatchSnapshot()` pousse l'état complet du match vers `matches` en continu
+- Lecture : abonnement `postgres_changes` en temps réel, un canal sur `match_events`, un sur `matches` (UPDATE) — nécessaire séparément pour que le chrono/la mi-temps se synchronisent (fix hors-cycle, sans quoi seuls les événements se synchronisaient)
+- Reprise : un appareil qui se connecte et trouve un match `in_progress` peut le reprendre entièrement (équipes, effectifs, gardiens, période, chrono recalculé, tous les événements) via `resumeMatch()`
+- **Principe non négociable** : la saisie locale ne doit jamais dépendre de la disponibilité de Supabase — fail-open partout (auth, sync, mode lecteur)
+
 ## Types d'actions (objet ACTIONS)
 ```javascript
 GOAL:     { needsMap:true,  isGoal:true }
@@ -133,6 +161,8 @@ TM:       { needsMap:false, isTM:true }
 - `showToast()` pour les notifications (paramètre `isAlert` pour le style rouge)
 - `showExportModal()` pour les exports (fallback clipboard)
 - IndexedDB via fonctions `dbSaveMatch()`, `dbGetAll()`, `dbDelete()`
+- Client Supabase nommé `sbClient` (pas `supabase`) pour ne pas entrer en conflit avec le namespace global de la librairie CDN
+- Toute fonction/handler d'écriture (saisie, chrono, undo, réglages destructifs) commence par `if(S.readOnly) return;` — convention à respecter pour tout nouveau point d'écriture ajouté à l'avenir
 
 ## Déploiement
 1. Modifier `style.css` et/ou `app.js`
@@ -141,6 +171,8 @@ TM:       { needsMap:false, isTM:true }
 4. Fermer Safari complètement sur iPad → réouvrir pour forcer le nouveau SW
 
 **Piège rencontré (à garder en tête)** : le dépôt `stat-terrain` avait deux branches, `main` (tout le travail réel) et `master` (figée au tout premier commit, jamais mise à jour). GitHub Pages avait été activé sur `master` par défaut, servant une version obsolète de l'app. Corrigé : branche par défaut du dépôt + source GitHub Pages basculées sur `main`. Si un futur outil se base sur "la branche par défaut", vérifier que c'est bien `main`.
+
+**Second piège rencontré** : activer RLS sur une table Supabase ne suffit pas à activer le Realtime dessus — ce sont deux réglages indépendants. Sans `alter publication supabase_realtime add table ...` exécuté séparément (script `docs/supabase-realtime-setup.sql`), un abonnement `postgres_changes` semble fonctionner (aucune erreur) mais ne reçoit jamais aucun événement. À vérifier explicitement après toute nouvelle table destinée à du temps réel.
 
 ## Règles importantes
 - **TOUJOURS** vérifier le JS avec `new Function()` avant de livrer
@@ -166,9 +198,17 @@ TM:       { needsMap:false, isTM:true }
 - **STORY-22** — Refonte du terrain en SVG natif, remplace l'ancienne image raster (corrigé, y compris géométrie réglementaire 6m/9m validée par Romain, et débordement desktop/tablette paysage corrigé)
 - **STORY-23** — Fondation du mode Simple/Expert (état, toggle, détection iPhone par défaut)
 - **STORY-24** — Écran Match en mode Simple (saisie rapide par équipe, sans terrain/zone)
+- **STORY-25** — Polish visuel de la carte joueur sur l'écran Équipes (badge numéro, accent d'équipe cohérent des deux côtés, lisibilité de l'état non-sélectionné) — QA PASSED
+- **STORY-10** — Fondation Supabase sécurisée (config.js, RLS activée + vérifiée sur le vrai projet, inscription publique désactivée) — QA PASSED
+- **STORY-11** — Écran d'accès partagé (mot de passe unique) — QA PASSED, persistance de session confirmée par Romain sur son iPad/iPhone réel
+- **STORY-12** — Synchronisation sortante (outbox IndexedDB, idempotente, jamais bloquante) — QA PASSED WITH NOTES (envoi réel contre le vrai projet Supabase encore à confirmer par Romain)
+- **STORY-13** — Synchronisation entrante temps réel (fusion sans doublon, ré-abonnement défensif) — QA PASSED WITH NOTES (réception réelle à deux appareils physiques encore à confirmer par Romain ; nécessite le script `supabase-realtime-setup.sql` exécuté)
+- **STORY-14** — Reprise de match sur un autre appareil — QA PASSED WITH NOTES (reconstruction vérifiée avec données simulées ; scénario réel à deux appareils encore à confirmer par Romain)
+- **STORY-26** — Mode lecteur (verrouillage de saisie par appareil) — QA PASSED, non-régression complète vérifiée par le Regression Guardian (46/46, v70)
+- Corrections hors-cycle : validation d'ajout de joueur adverse assouplie (nom OU numéro suffit, plus seulement numéro) ; import CSV ignorant désormais la ligne d'en-tête (évitait un joueur fantôme "Nom"/DC au ré-import) ; synchronisation temps réel du chrono/mi-temps (nécessitait un abonnement realtime séparé sur la table `matches`, en plus de celui sur `match_events`)
 
 ## Décisions en attente / Roadmap
 
-- **Chantier Supabase cadré, pas développé** : passage d'un stockage 100% local à un stockage partagé Supabase pour permettre la saisie par un aidant occasionnel sur un autre appareil. Voir `docs/architecture-supabase.md`, `docs/prd-v2-cloud-multiuser.md`, stories `STORY-10` à `STORY-17`. Point de vigilance sécurité déjà identifié : désactiver l'inscription publique + activer RLS avant toute donnée réelle (voir `docs/security/supabase-multiuser.md`). Le mode Simple (STORY-23/24) a été pensé comme prérequis UX à ce chantier, pour qu'un aidant occasionnel non-formé puisse saisir sans être exposé à la complexité du mode Expert.
+- **Chantier Supabase livré (STORY-10 à 14), avec vérifications réelles encore en attente** : le code est en production et QA validé (voir État d'avancement), mais trois points restent explicitement "à confirmer par Romain sur de vrais appareils" avant d'être considérés définitivement clos : envoi réussi de l'outbox contre le vrai projet, réception temps réel à deux appareils physiques distincts, et scénario complet de reprise de match d'un appareil à l'autre.
+- **STORY-15 (indicateur de statut de synchronisation), STORY-16 (clarté interface pour un aidant non-formé) et STORY-17 (doc de clonage/déploiement pour un autre coach) restent à développer** — aucun rapport QA, critères d'acceptation non cochés dans leurs fichiers de story respectifs. STORY-17 en particulier signifie que CLAUDE.md n'a pas encore de section "cloner ce projet pour un autre coach".
 - **Migration d'hébergement en cours** : dépôt GitHub renommé `stat-terrain` et rendu **public** pour permettre GitHub Pages (nécessaire côté offre gratuite). Netlify gardé en parallèle jusqu'à validation réelle. Les captures d'écran de vérification technique (`docs/design/screenshots/`) ont été retirées de l'état courant du dépôt (elles montraient l'ancien roster par défaut avec de vrais prénoms) — l'historique Git antérieur les contient encore, pas de réécriture d'historique effectuée.
-- **Polish visuel de l'écran Équipes** : la liste de joueurs (`.player-card`) reste jugée insuffisamment travaillée visuellement (retour Romain post-STORY-04) — pas encore de story dédiée.
