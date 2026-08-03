@@ -81,6 +81,7 @@ function freshState(){
     authOk:null, // null = vérification en cours, true = accès autorisé, false = écran d'accès affiché
     authError:null, // message d'erreur affiché sur l'écran d'accès
     currentMatchId:null, // uuid du match en cours pour la sync Supabase (généré à la volée, cf. STORY-12)
+    resumePrompt:null, // liste des matchs "in_progress" trouvés sur Supabase à la connexion (STORY-14)
   };
 }
 
@@ -135,6 +136,7 @@ async function checkAuthSession(){
   }catch(e){
     S.authOk=true; // fail-open : jamais bloquer l'usage local sur une erreur réseau/API
   }
+  if(S.authOk) await checkForResumableMatch();
   R();
 }
 
@@ -145,6 +147,59 @@ async function signInShared(password){
   const {error}=await client.auth.signInWithPassword({email:SUPABASE_AUTH_EMAIL,password});
   if(error){ S.authError="Code d'accès incorrect."; R(); return; }
   S.authOk=true;
+  await checkForResumableMatch();
+  R();
+}
+
+// ─── Reprise de match sur un autre appareil — STORY-14 ───
+async function fetchInProgressMatches(){
+  const client=initSupabaseClient();
+  if(!client) return [];
+  try{
+    const {data,error}=await client.from('matches').select('*').eq('status','in_progress').order('updated_at',{ascending:false});
+    if(error||!data) return [];
+    return data;
+  }catch(e){ return []; }
+}
+
+async function checkForResumableMatch(){
+  if(S.currentMatchId) return; // cet appareil a déjà un match actif cette session, ne pas proposer d'en reprendre un autre
+  const matches=await fetchInProgressMatches();
+  if(matches.length>0) S.resumePrompt=matches;
+}
+
+async function resumeMatch(matchId){
+  const client=initSupabaseClient();
+  if(!client) return;
+  try{
+    const {data:match,error:matchErr}=await client.from('matches').select('*').eq('id',matchId).single();
+    if(matchErr||!match) return;
+    const {data:events,error:evErr}=await client.from('match_events').select('*').eq('match_id',matchId);
+    S.home.name=match.home_name||"FENIX Toulouse";
+    S.away.name=match.away_name||"Adversaire";
+    S.home.players=match.home_roster||[];
+    S.away.players=match.away_roster||[];
+    S.home.gkId=match.home_gk_id||null;
+    S.away.gkId=match.away_gk_id||null;
+    S.period=match.period||1;
+    S.time=match.time_offset_seconds||0;
+    if(match.running && match.last_start_at){
+      const elapsed=Math.floor((Date.now()-new Date(match.last_start_at).getTime())/1000);
+      S.time+=Math.max(0,elapsed);
+    }
+    S.events=(evErr||!events?[]:events).map(supabaseRowToEvent).sort((a,b)=>
+      (b.period-a.period) || (b.rawTime-a.rawTime)
+    );
+    S.currentMatchId=matchId;
+    S.resumePrompt=null;
+    S.view="match";
+    subscribeMatchEvents(matchId);
+    if(match.running) startTimer(); else R();
+  }catch(e){ /* best-effort — en cas d'échec, laisser l'écran de reprise affiché pour réessayer */ }
+}
+
+function dismissResumePrompt(){
+  S.resumePrompt=null;
   R();
 }
 
@@ -174,17 +229,26 @@ function eventToSupabaseRow(event,matchId){
 }
 
 let matchRegisteredThisSession=false;
-async function ensureMatchRegistered(){
+// Snapshot complet du match (effectifs, GB, période, chrono) — pas juste la ligne minimale
+// nécessaire à la contrainte de clé étrangère. Nécessaire pour qu'un autre appareil puisse
+// "reprendre" ce match (STORY-14) sans avoir à ressaisir les équipes.
+async function upsertMatchSnapshot(){
   const client=initSupabaseClient();
   if(!client||!S.currentMatchId) return;
   try{
     const {error}=await client.from('matches').upsert({
       id:S.currentMatchId, status:'in_progress',
-      home_name:S.home.name, away_name:S.away.name
+      home_name:S.home.name, away_name:S.away.name,
+      home_roster:S.home.players, away_roster:S.away.players,
+      home_gk_id:S.home.gkId, away_gk_id:S.away.gkId,
+      period:S.period, time_offset_seconds:S.time,
+      running:S.running, last_start_at:S.running?new Date().toISOString():null,
+      updated_at:new Date().toISOString()
     });
     if(!error) matchRegisteredThisSession=true;
-  }catch(e){ /* best-effort, retenté au prochain flush */ }
+  }catch(e){ /* best-effort, retenté au prochain flush/changement */ }
 }
+async function ensureMatchRegistered(){ return upsertMatchSnapshot(); }
 
 async function queueEventForSync(event){
   if(!S.currentMatchId){
@@ -460,8 +524,8 @@ function exportPlayersCSV(side){
 }
 
 let timerInterval=null;
-function startTimer(){ if(S.running)return; S.running=true; timerInterval=setInterval(()=>{S.time++;renderTimer();},1000); R();}
-function stopTimer(){ S.running=false; clearInterval(timerInterval); R();}
+function startTimer(){ if(S.running)return; S.running=true; timerInterval=setInterval(()=>{S.time++;renderTimer();},1000); upsertMatchSnapshot(); R();}
+function stopTimer(){ S.running=false; clearInterval(timerInterval); upsertMatchSnapshot(); R();}
 function resetTimer(){ stopTimer(); S.time=0; R();}
 function fmtTime(t){ const m=Math.floor(t/60),s=t%60; return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"); }
 function renderTimer(){ const el=document.getElementById("tmr"); if(el) el.textContent=fmtTime(S.time); }
@@ -1203,9 +1267,17 @@ async function saveMatch(){
   try{
     await dbSaveMatch(match);
     const count=await dbGetAll().then(a=>a.length).catch(()=>0);
+    markMatchFinished();
     safeAlert("✅ Match sauvegardé !\n\n💾 "+count+" match(s) en mémoire.\n\n📥 Pensez à exporter le CSV de temps en temps\n(onglet Matchs → Export CSV)");
   }catch(e){ safeAlert("Erreur de sauvegarde: "+e.message); }
   R();
+}
+
+// Marque le match Supabase courant comme terminé, pour qu'il arrête d'apparaître comme "reprenable"
+async function markMatchFinished(){
+  const client=initSupabaseClient();
+  if(!client||!S.currentMatchId) return;
+  try{ await client.from('matches').update({status:'finished'}).eq('id',S.currentMatchId); }catch(e){}
 }
 
 function newMatch(){
@@ -1219,6 +1291,7 @@ function newMatch(){
   S.tmUsed={mt1:0,mt2:0}; S.tmLastAlert=0; S.coachNotes="";
   S.journee="J"+(jNum+1);
   S.away.name="Adversaire";
+  markMatchFinished(); // l'ancien match ne doit plus apparaître comme "reprenable" une fois abandonné
   S.currentMatchId=null; // nouveau match = nouvel id Supabase, régénéré à la volée au premier événement
   unsubscribeMatchEvents();
   R();
@@ -1236,6 +1309,30 @@ function renderAccessScreen(){
       <input type="password" id="access-password" class="access-input" autocomplete="current-password" placeholder="••••••••">
       ${S.authError?`<div class="access-error">${S.authError}</div>`:""}
       <button class="btn btn-g access-submit" id="access-submit">Entrer</button>
+    </div>
+  </div>`;
+}
+
+function renderResumePrompt(){
+  const ago=(iso)=>{
+    const min=Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/60000));
+    return min<1?"à l'instant":min===1?"il y a 1 min":"il y a "+min+" min";
+  };
+  return `<div class="access-screen">
+    <div class="access-card" style="max-width:380px;">
+      <div class="logo-i" style="width:56px;height:56px;margin:0 auto 14px;"><img src="${FENIX_LOGO}"></div>
+      <h1>Match en cours</h1>
+      <div style="text-align:left;">
+        ${S.resumePrompt.map(m=>`
+          <div style="background:rgba(255,255,255,.04);border:1px solid var(--card-border);border-radius:var(--r2);padding:12px;margin-bottom:10px;">
+            <div style="font-size:10px;font-weight:800;color:var(--fenix-sky);letter-spacing:.06em;margin-bottom:4px;">🟢 EN COURS</div>
+            <div style="font-weight:700;font-size:15px;margin-bottom:2px;">${m.home_name} vs ${m.away_name}</div>
+            <div style="font-size:11px;color:var(--t2);margin-bottom:10px;">Débuté ${ago(m.created_at)}</div>
+            <button class="btn btn-g" style="width:100%;" data-resume-match="${m.id}">Reprendre →</button>
+          </div>
+        `).join("")}
+      </div>
+      <button class="btn btn-sm" style="width:100%;border-color:var(--border);color:var(--t3);" id="dismiss-resume">Non, nouveau match</button>
     </div>
   </div>`;
 }
@@ -1261,6 +1358,13 @@ function R(){
       const clone=app.cloneNode(false);
       clone.innerHTML="";
       app.parentNode.replaceChild(clone,app);
+      return;
+    }
+    if(S.resumePrompt){
+      const clone=app.cloneNode(false);
+      clone.innerHTML=renderResumePrompt();
+      app.parentNode.replaceChild(clone,app);
+      bind();
       return;
     }
 
@@ -1327,7 +1431,7 @@ function renderSetup(){
   </div>
   ${renderModeToggle()}
   <div style="text-align:center;margin-top:10px;">
-    <button class="btn btn-g" style="padding:12px 32px;font-size:14px;border-color:var(--fenix-sky);color:var(--fenix-sky);background:rgba(123,167,194,.08);" data-v="match">▶ Lancer le match</button>
+    <button class="btn btn-g" id="launch-match-btn" style="padding:12px 32px;font-size:14px;border-color:var(--fenix-sky);color:var(--fenix-sky);background:rgba(123,167,194,.08);">▶ Lancer le match</button>
   </div>`;
 }
 
@@ -3355,6 +3459,19 @@ function bind(){
   }
   const signOutBtn=document.getElementById("sign-out-btn");
   if(signOutBtn) signOutBtn.onclick=()=>{ if(safeConfirm("Se déconnecter de l'accès partagé ?")) signOutShared(); };
+  const launchBtn=document.getElementById("launch-match-btn");
+  if(launchBtn) launchBtn.onclick=()=>{
+    if(!S.currentMatchId) S.currentMatchId=gid();
+    subscribeMatchEvents(S.currentMatchId);
+    upsertMatchSnapshot();
+    S.view="match";
+    R();
+  };
+  document.querySelectorAll("[data-resume-match]").forEach(el=>{
+    el.onclick=()=>resumeMatch(el.dataset.resumeMatch);
+  });
+  const dismissBtn=document.getElementById("dismiss-resume");
+  if(dismissBtn) dismissBtn.onclick=()=>dismissResumePrompt();
   // Nav
   document.querySelectorAll("[data-v]").forEach(el=>{ el.onclick=async()=>{
     S.view=el.dataset.v;
@@ -3483,7 +3600,7 @@ function bind(){
       const p = S[side].players.find(pl=>pl.id===pid);
       if(!p) return;
       p.selected = !p.selected;
-      saveTeams(); R();
+      saveTeams(); upsertMatchSnapshot(); R();
     };
   });
 
@@ -3543,13 +3660,13 @@ function bind(){
 
   // GK select
   document.querySelectorAll("[data-gk-sel]").forEach(el=>{
-    el.onchange=()=>{ S[el.dataset.gkSel].gkId=el.value||null; S.tmLastAlert=0; R(); };
+    el.onchange=()=>{ S[el.dataset.gkSel].gkId=el.value||null; S.tmLastAlert=0; upsertMatchSnapshot(); R(); };
   });
 
   // Timer
   const tt=document.getElementById("t-toggle"); if(tt) tt.onclick=()=>S.running?stopTimer():startTimer();
   const tr=document.getElementById("t-reset"); if(tr) tr.onclick=resetTimer;
-  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;R();};
+  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;upsertMatchSnapshot();R();};
 
   // Actions
   document.querySelectorAll("[data-act]").forEach(el=>{ el.onclick=()=>selectAction(el.dataset.act); });
