@@ -187,7 +187,10 @@ async function ensureMatchRegistered(){
 }
 
 async function queueEventForSync(event){
-  if(!S.currentMatchId) S.currentMatchId=gid();
+  if(!S.currentMatchId){
+    S.currentMatchId=gid();
+    subscribeMatchEvents(S.currentMatchId);
+  }
   try{
     await outboxPut(eventToSupabaseRow(event,S.currentMatchId));
   }catch(e){ /* la file d'attente est best-effort : ne jamais faire perdre l'événement local */ }
@@ -227,8 +230,63 @@ async function flushOutbox(){
     flushInProgress=false;
   }
 }
-window.addEventListener('online',()=>flushOutbox());
+window.addEventListener('online',()=>{
+  flushOutbox();
+  if(S.currentMatchId) subscribeMatchEvents(S.currentMatchId); // re-abonnement défensif si le canal realtime a été coupé
+});
 setInterval(()=>flushOutbox(),15000);
+
+// ─── Synchronisation entrante (temps réel) — STORY-13 ───
+function supabaseRowToEvent(row){
+  return {
+    id:row.id, type:row.type, team:row.team,
+    time:fmtTime(row.raw_time||0), rawTime:row.raw_time,
+    period:row.period, x:row.x, y:row.y, gkId:row.gk_id,
+    playerId:row.player_id, playerName:row.player_name, playerNumber:row.player_number,
+    assistId:row.assist_id, assistName:row.assist_name, assistNumber:row.assist_number,
+    goalZone:row.goal_zone
+  };
+}
+
+function mergeRemoteEvent(row){
+  const incoming=supabaseRowToEvent(row);
+  const existingIdx=S.events.findIndex(e=>e.id===incoming.id);
+  if(existingIdx!==-1){
+    // Événement déjà connu localement (propre écho, ou correction faite ailleurs) : mise à jour en place, pas de doublon
+    S.events[existingIdx]=incoming;
+  } else {
+    // Insertion à la bonne position chronologique (index 0 = le plus récent, cf. usages de S.events[0] dans le reste de l'app)
+    const insertIdx=S.events.findIndex(e=>
+      e.period<incoming.period || (e.period===incoming.period && e.rawTime<incoming.rawTime)
+    );
+    if(insertIdx===-1) S.events.push(incoming);
+    else S.events.splice(insertIdx,0,incoming);
+  }
+  R();
+}
+
+let realtimeChannel=null;
+function subscribeMatchEvents(matchId){
+  const client=initSupabaseClient();
+  if(!client||!matchId) return;
+  if(realtimeChannel){ try{ client.removeChannel(realtimeChannel); }catch(e){} realtimeChannel=null; }
+  realtimeChannel=client.channel('match_events_'+matchId)
+    .on('postgres_changes',{event:'*',schema:'public',table:'match_events',filter:'match_id=eq.'+matchId},(payload)=>{
+      if(payload.eventType==='DELETE'){
+        const idx=S.events.findIndex(e=>e.id===(payload.old&&payload.old.id));
+        if(idx!==-1){ S.events.splice(idx,1); R(); }
+        return;
+      }
+      mergeRemoteEvent(payload.new);
+    })
+    .subscribe();
+}
+function unsubscribeMatchEvents(){
+  if(!realtimeChannel) return;
+  const client=initSupabaseClient();
+  if(client){ try{ client.removeChannel(realtimeChannel); }catch(e){} }
+  realtimeChannel=null;
+}
 
 // ─── IndexedDB for match history ───
 const DB_NAME="fenix_stats"; const DB_VER=2; const STORE="matches"; const OUTBOX_STORE="pendingSync";
@@ -1157,6 +1215,7 @@ function newMatch(){
   S.journee="J"+(jNum+1);
   S.away.name="Adversaire";
   S.currentMatchId=null; // nouveau match = nouvel id Supabase, régénéré à la volée au premier événement
+  unsubscribeMatchEvents();
   R();
 }
 
