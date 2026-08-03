@@ -13,9 +13,14 @@
 
 ## Critères d'acceptation
 
-- [ ] L'indicateur reflète correctement les trois états selon l'état réel de la file de synchronisation.
-- [ ] Il n'est jamais alarmant ni intrusif (pas de popup, pas de son) — un simple élément visuel discret dans la scoreboard.
-- [ ] `docs/stories/STORY-06-bandeau-rappel-sauvegarde.md` (cycle 1) est marquée comme superseded par cette story lors du passage en développement.
+- [x] L'indicateur reflète correctement les trois états selon l'état réel de la file de synchronisation (`computeSyncStatus()`, basé sur `navigator.onLine`, `flushInProgress` et `syncPendingCount`).
+- [x] Il n'est jamais alarmant ni intrusif (pas de popup, pas de son) — un simple élément textuel discret dans le bandeau haut de l'écran Match (`renderSyncIndicator()`).
+- [x] `docs/stories/STORY-06-bandeau-rappel-sauvegarde.md` (cycle 1) est marquée comme superseded par cette story.
+
+## Notes d'implémentation
+
+- Placé dans `.ml-left` (bandeau logo + Suivi GB), pas dans une des deux variantes de scoreboard historiques — `renderScoreboard()` s'est avéré être du code mort (jamais appelé depuis la refonte layout iPhone), la vraie zone équivalente est le bandeau du haut de `renderMatch()`.
+- N'apparaît que si Supabase est configuré (`sbClient` non nul) — pas d'indicateur affiché pour un usage 100% local.
 
 ## Hors scope
 

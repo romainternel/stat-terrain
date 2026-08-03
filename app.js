@@ -274,13 +274,20 @@ async function queueEventForSync(event){
 // (cf. notes Developer STORY-12 : limite connue, pas couverte par un mécanisme de retry dédié).
 async function dequeueEventSync(event){
   if(!event) return;
-  try{ await outboxDelete(event.id); }catch(e){}
+  try{ await outboxDelete(event.id); await refreshSyncPendingCount(); patchSyncIndicator(); }catch(e){}
   const client=initSupabaseClient();
   if(!client) return;
   try{ await client.from('match_events').delete().eq('id',event.id); }catch(e){}
 }
 
 let flushInProgress=false;
+// STORY-15 : nombre d'événements en attente d'envoi, pour l'indicateur ✓/↻/⚠ — best-effort,
+// jamais utilisé pour bloquer/retenter quoi que ce soit, uniquement affiché.
+let syncPendingCount=0;
+async function refreshSyncPendingCount(){
+  try{ syncPendingCount=(await outboxGetAll()).length; }catch(e){}
+}
+refreshSyncPendingCount();
 async function flushOutbox(){
   if(flushInProgress) return;
   const client=initSupabaseClient();
@@ -288,25 +295,61 @@ async function flushOutbox(){
   flushInProgress=true;
   try{
     const pending=await outboxGetAll();
+    syncPendingCount=pending.length;
     if(pending.length===0) return;
     if(!matchRegisteredThisSession) await ensureMatchRegistered();
     for(const row of pending){
       try{
         const {error}=await client.from('match_events').upsert(row);
-        if(!error) await outboxDelete(row.id);
+        if(!error){ await outboxDelete(row.id); syncPendingCount=Math.max(0,syncPendingCount-1); }
       }catch(e){ /* réseau indisponible, retenté au prochain flush */ }
     }
   }catch(e){
     /* best-effort */
   }finally{
     flushInProgress=false;
+    patchSyncIndicator();
   }
 }
 window.addEventListener('online',()=>{
   flushOutbox();
   if(S.currentMatchId) subscribeMatchEvents(S.currentMatchId); // re-abonnement défensif si le canal realtime a été coupé
+  patchSyncIndicator();
 });
+window.addEventListener('offline',()=>{ patchSyncIndicator(); });
 setInterval(()=>flushOutbox(),15000);
+
+// STORY-15 : indicateur discret ✓ sync / ↻ envoi en cours / ⚠ hors-ligne
+const SYNC_STATUS_CFG={
+  synced:{icon:"✓",label:"sync",color:"var(--fenix-sky)"},
+  syncing:{icon:"↻",label:"envoi…",color:"var(--yellow)"},
+  offline:{icon:"⚠",label:"hors-ligne",color:"var(--red)"}
+};
+function computeSyncStatus(){
+  if(!sbClient) return null; // pas de sync configurée : pas d'indicateur
+  if(!navigator.onLine) return "offline";
+  if(flushInProgress || syncPendingCount>0) return "syncing";
+  return "synced";
+}
+// Patch DOM ciblé (comme renderTimer()) plutôt qu'un R() complet : évite de perdre le focus
+// d'un champ texte en cours de saisie ailleurs dans l'app à chaque cycle de flush (toutes les 15s).
+function patchSyncIndicator(){
+  const el=document.querySelector(".sync-indicator");
+  if(!el) return;
+  const st=computeSyncStatus();
+  if(!st) return;
+  const cfg=SYNC_STATUS_CFG[st];
+  el.className=`sync-indicator sync-${st}`;
+  el.style.color=cfg.color;
+  el.title=`Synchronisation : ${cfg.label}`;
+  el.textContent=`${cfg.icon} ${cfg.label}`;
+}
+function renderSyncIndicator(){
+  const st=computeSyncStatus();
+  if(!st) return "";
+  const cfg=SYNC_STATUS_CFG[st];
+  return `<span class="sync-indicator sync-${st}" style="font-size:10px;font-weight:700;color:${cfg.color};white-space:nowrap;" title="Synchronisation : ${cfg.label}">${cfg.icon} ${cfg.label}</span>`;
+}
 
 // ─── Synchronisation entrante (temps réel) — STORY-13 ───
 function supabaseRowToEvent(row){
@@ -1717,6 +1760,7 @@ function renderMatch(){
       <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:var(--r2);border:1px solid var(--border);">
         <div class="logo-i" style="width:26px;height:26px;"><img src="${FENIX_LOGO}"></div>
         <span style="font-size:10px;font-weight:700;color:var(--t2);white-space:nowrap;">🧤 Suivi GB</span>
+        ${renderSyncIndicator()}
         <button onclick="S.trackGK=!S.trackGK;R();" style="margin-left:auto;padding:3px 10px;border-radius:20px;border:1.5px solid ${S.trackGK?"var(--fenix-sky)":"var(--border)"};background:${S.trackGK?"rgba(95,168,211,.15)":"transparent"};color:${S.trackGK?"var(--fenix-sky)":"var(--t3)"};font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;">${S.trackGK?"✓ ON":"✗ OFF"}</button>
       </div>
       ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)",h2m,hRed)}

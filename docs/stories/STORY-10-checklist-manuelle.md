@@ -13,6 +13,11 @@ Ces étapes nécessitent un accès au compte/dashboard Supabase de Romain — ne
 - Cliquer **Run**.
 - Vérifier qu'aucune erreur ne s'affiche.
 
+## 2bis. Activer le Realtime (nécessaire depuis STORY-13/14 — sans cette étape le chrono et les événements ne se synchronisent jamais entre appareils, sans aucune erreur visible)
+- Toujours dans **SQL Editor** → **New query**.
+- Copier-coller le contenu de `docs/supabase-realtime-setup.sql` (2 lignes `alter publication supabase_realtime add table ...`).
+- Cliquer **Run**.
+
 ## 3. Créer le compte partagé (unique, pas d'auto-inscription)
 - Menu **Authentication** → **Users** → **Add user** → **Create new user**.
 - Email au choix (idéalement une adresse que Romain surveille, pour la récupération de mot de passe).

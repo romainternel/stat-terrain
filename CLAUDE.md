@@ -205,10 +205,24 @@ TM:       { needsMap:false, isTM:true }
 - **STORY-13** — Synchronisation entrante temps réel (fusion sans doublon, ré-abonnement défensif) — QA PASSED, réception réelle à deux appareils physiques confirmée par Romain
 - **STORY-14** — Reprise de match sur un autre appareil — QA PASSED, scénario réel à deux appareils confirmé par Romain (démarrage sur un appareil, reprise sur l'autre, chrono/mi-temps/événements synchronisés)
 - **STORY-26** — Mode lecteur (verrouillage de saisie par appareil) — QA PASSED, non-régression complète vérifiée par le Regression Guardian (46/46, v70), confirmé par Romain en conditions réelles à deux appareils
+- **STORY-15** — Indicateur discret de statut de synchronisation (✓ sync / ↻ envoi… / ⚠ hors-ligne) dans le bandeau haut de l'écran Match, absorbe/remplace définitivement STORY-06 (bandeau d'export manuel, superseded)
+- **STORY-16** — Audit de clarté d'interface pour un aidant occasionnel : critères déjà satisfaits par le code existant (icône+label toujours ensemble sur les boutons d'action, bouton "↩ Annuler" aussi visible que les actions principales) — aucun changement de code nécessaire, confirmé par test réel CDP. Le Mode Simple (STORY-23/24) répond en pratique mieux encore au besoin initial de cette story.
+- **STORY-17** — Documentation de clonage pour un autre coach (voir section "Cloner ce projet" ci-dessous)
 - Corrections hors-cycle : validation d'ajout de joueur adverse assouplie (nom OU numéro suffit, plus seulement numéro) ; import CSV ignorant désormais la ligne d'en-tête (évitait un joueur fantôme "Nom"/DC au ré-import) ; synchronisation temps réel du chrono/mi-temps (nécessitait un abonnement realtime séparé sur la table `matches`, en plus de celui sur `match_events`)
+
+## Cloner ce projet pour un autre coach/équipe (STORY-17)
+
+Décision actée : **un projet Supabase = un déploiement = un coach** (voir aussi la section Décisions en attente). Chaque clone a son propre repo GitHub et son propre projet Supabase, pour ne pas mélanger données/quotas entre équipes.
+
+1. **Copier le repo** — fork ou clone GitHub de `stat-terrain` vers un nouveau dépôt.
+2. **Créer un nouveau projet Supabase** dédié (compte gratuit suffit pour l'usage occasionnel prévu).
+3. **Exécuter le script de création des tables/policies** : `docs/supabase-setup.sql` (tables `matches`/`match_events`, RLS activée), puis `docs/supabase-realtime-setup.sql` (active le Realtime — étape séparée de RLS, indispensable, cf. piège documenté plus haut). Checklist détaillée pas-à-pas : `docs/stories/STORY-10-checklist-manuelle.md`.
+4. **Remplacer `config.js`** avec l'URL et la clé `anon`/`publishable` du nouveau projet (jamais la clé `service_role`).
+5. **Créer le compte unique** (Authentication → Users → Add user) — un seul email/mot de passe partagé pour toute l'équipe, pas de compte par personne.
+6. **Désactiver l'inscription publique** (Authentication → Providers/Settings → Email → "Enable email signups" désactivé) — non négociable, sans quoi n'importe qui trouvant l'URL pourrait créer un compte et accéder à toutes les données.
+7. Vérifier que RLS est bien activée (badge vert) sur les deux tables avant tout usage réel avec de vraies données.
 
 ## Décisions en attente / Roadmap
 
-- **Chantier Supabase (STORY-10 à 14) et mode lecteur (STORY-26) définitivement clos** : validés en conditions réelles à deux appareils physiques par Romain (2026-08-03) — envoi/réception temps réel, reprise de match, verrouillage lecteur, tout confirmé fonctionnel.
-- **STORY-15 (indicateur de statut de synchronisation), STORY-16 (clarté interface pour un aidant non-formé) et STORY-17 (doc de clonage/déploiement pour un autre coach) restent à développer** — aucun rapport QA, critères d'acceptation non cochés dans leurs fichiers de story respectifs. STORY-17 en particulier signifie que CLAUDE.md n'a pas encore de section "cloner ce projet pour un autre coach".
+- **Tout le backlog cadré lors du chantier Supabase (STORY-10 à 17) est maintenant livré et validé en conditions réelles** (2026-08-03) : synchronisation multi-appareil, mode lecteur, indicateur de sync, audit de clarté d'interface, doc de clonage. Plus aucune story ouverte dans ce cycle.
 - **Migration d'hébergement en cours** : dépôt GitHub renommé `stat-terrain` et rendu **public** pour permettre GitHub Pages (nécessaire côté offre gratuite). Netlify gardé en parallèle jusqu'à validation réelle. Les captures d'écran de vérification technique (`docs/design/screenshots/`) ont été retirées de l'état courant du dépôt (elles montraient l'ancien roster par défaut avec de vrais prénoms) — l'historique Git antérieur les contient encore, pas de réécriture d'historique effectuée.
