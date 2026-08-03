@@ -3433,9 +3433,9 @@ function bind(){
       const nameInput=document.getElementById("add-name-"+side)?.value.trim();
       const num=document.getElementById("add-num-"+side)?.value.trim();
       const pos=document.getElementById("add-pos-"+side)?.value||"?";
-      // Home: need at least a name. Away: need at least a number
+      // Home: need at least a name. Away: need at least a name OR a number (pas obligatoirement un numéro).
       if(side==="home" && !nameInput) return;
-      if(side==="away" && !num) return;
+      if(side==="away" && !nameInput && !num) return;
       const name = nameInput || "?";
       const number = num ? parseInt(num) : "";
       S[side].players.push({id:gid(),name,number,position:pos,selected:false});
