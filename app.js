@@ -330,6 +330,23 @@ function mergeRemoteEvent(row){
 }
 
 let realtimeChannel=null;
+// Fusionne l'état "match" reçu en temps réel (période, chrono) — sans ça, le chrono d'un
+// appareil ne se met jamais à jour après la reprise initiale, seuls les événements le font.
+function mergeRemoteMatchSnapshot(row){
+  if(!row) return;
+  const wasRunning=S.running;
+  S.period=row.period||S.period;
+  if(row.running && row.last_start_at){
+    const elapsed=Math.floor((Date.now()-new Date(row.last_start_at).getTime())/1000);
+    S.time=(row.time_offset_seconds||0)+Math.max(0,elapsed);
+    if(!wasRunning){ S.running=true; timerInterval=setInterval(()=>{S.time++;renderTimer();},1000); }
+  } else {
+    S.time=row.time_offset_seconds||0;
+    if(wasRunning){ S.running=false; clearInterval(timerInterval); }
+  }
+  R();
+}
+
 function subscribeMatchEvents(matchId){
   const client=initSupabaseClient();
   if(!client||!matchId) return;
@@ -342,6 +359,9 @@ function subscribeMatchEvents(matchId){
         return;
       }
       mergeRemoteEvent(payload.new);
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'matches',filter:'id=eq.'+matchId},(payload)=>{
+      mergeRemoteMatchSnapshot(payload.new);
     })
     .subscribe();
 }
