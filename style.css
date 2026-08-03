@@ -355,6 +355,32 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   background:rgba(232,70,90,.06);color:var(--red);font-size:20px;font-weight:800;cursor:pointer;transition:all .12s;}
 .pd-prompt-no:active{background:rgba(232,70,90,.2);transform:scale(.94);}
 
+/* ── MODE LECTEUR ── */
+.readonly-banner{
+  grid-column:1/-1;
+  background:rgba(240,199,94,.12);border:1.5px solid var(--yellow);border-radius:6px;
+  padding:6px 10px;text-align:center;font-size:11px;font-weight:700;color:var(--yellow);
+  letter-spacing:.05em;
+}
+.match-layout.is-readonly .act-h,
+.match-layout.is-readonly .mlt-btn-tm,
+.match-layout.is-readonly .sb-badge,
+.match-layout.is-readonly .mlt-gk-sel,
+.match-layout.is-readonly .gk-select-bar select,
+.match-layout.is-readonly #pd-btn,
+.match-layout.is-readonly #t-toggle,
+.match-layout.is-readonly #t-reset,
+.match-layout.is-readonly #per-btn,
+.match-layout.is-readonly #undo-btn{
+  opacity:.35;pointer-events:none;
+}
+.feed-panel.is-readonly .feed-del-btn{
+  opacity:.35;pointer-events:none;
+}
+.feed-panel.is-readonly .feed-item-edit{
+  cursor:default;pointer-events:none;
+}
+
 /* ── MATCH LAYOUT 2-COLONNES ── */
 .match-layout{
   display:grid;

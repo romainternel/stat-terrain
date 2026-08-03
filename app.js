@@ -82,6 +82,7 @@ function freshState(){
     authError:null, // message d'erreur affiché sur l'écran d'accès
     currentMatchId:null, // uuid du match en cours pour la sync Supabase (généré à la volée, cf. STORY-12)
     resumePrompt:null, // liste des matchs "in_progress" trouvés sur Supabase à la connexion (STORY-14)
+    readOnly:false, // true = verrouille la saisie sur cet appareil (regarde sans pouvoir modifier) — overwritten below depuis localStorage
   };
 }
 
@@ -104,6 +105,13 @@ try {
   const savedMode = localStorage.getItem("hb2_mode");
   S.mode = (savedMode==="simple"||savedMode==="expert") ? savedMode : (window.innerWidth<700 ? "simple" : "expert");
 } catch(e){}
+try { S.readOnly = localStorage.getItem("hb2_readonly")==="1"; } catch(e){}
+
+function setReadOnly(val){
+  S.readOnly=val;
+  try{ localStorage.setItem("hb2_readonly", val?"1":"0"); }catch(e){}
+  R();
+}
 
 function saveTeams(){ localStorage.setItem("hb2_teams",JSON.stringify({home:S.home,away:S.away})); }
 function saveMatches(){ localStorage.setItem("hb2_matches",JSON.stringify(S.savedMatches)); }
@@ -544,9 +552,9 @@ function exportPlayersCSV(side){
 }
 
 let timerInterval=null;
-function startTimer(){ if(S.running)return; S.running=true; timerInterval=setInterval(()=>{S.time++;renderTimer();},1000); upsertMatchSnapshot(); R();}
-function stopTimer(){ S.running=false; clearInterval(timerInterval); upsertMatchSnapshot(); R();}
-function resetTimer(){ stopTimer(); S.time=0; R();}
+function startTimer(){ if(S.running||S.readOnly)return; S.running=true; timerInterval=setInterval(()=>{S.time++;renderTimer();},1000); upsertMatchSnapshot(); R();}
+function stopTimer(){ if(S.readOnly)return; S.running=false; clearInterval(timerInterval); upsertMatchSnapshot(); R();}
+function resetTimer(){ if(S.readOnly)return; stopTimer(); S.time=0; R();}
 function fmtTime(t){ const m=Math.floor(t/60),s=t%60; return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"); }
 function renderTimer(){ const el=document.getElementById("tmr"); if(el) el.textContent=fmtTime(S.time); }
 
@@ -562,6 +570,7 @@ function autoValidatePending(){
 }
 
 function selectAction(type){
+  if(S.readOnly) return;
   autoValidatePending();
   S.penResultSelect = null;
   S.selectedAction = S.selectedAction===type ? null : type;
@@ -571,6 +580,7 @@ function selectAction(type){
 
 
 function clickTeam(team){
+  if(S.readOnly) return;
   if(!S.selectedAction) return;
   autoValidatePending();
   S._lastTeam = team;
@@ -604,6 +614,7 @@ function clickTeam(team){
 }
 
 function clickActionPlayer(playerId){
+  if(S.readOnly) return;
   // Possession-based: create actionPanel on first player tap
   if(!S.actionPanel){
     if(!S.selectedAction) return;
@@ -645,6 +656,7 @@ function clickActionPlayer(playerId){
 }
 
 function clickGoalZone(zone){
+  if(S.readOnly) return;
   const ap=S.actionPanel; if(!ap) return;
   ap.goalZone = ap.goalZone===zone ? null : zone;
   const act=ACTIONS[ap.type];
@@ -656,6 +668,7 @@ function clickGoalZone(zone){
 }
 
 function clickCourtPosition(x,y){
+  if(S.readOnly) return;
   const ap=S.actionPanel; if(!ap||!ap.shooterId) return;
   ap.mapX=x; ap.mapY=y;
   if(!S.trackGK){ validateAndClose(); }
@@ -663,6 +676,7 @@ function clickCourtPosition(x,y){
 }
 
 function recordTM(team){
+  if(S.readOnly) return;
   if(team==="home"){
     const mtKey=S.period===1?"mt1":"mt2";
     if(S.tmUsed[mtKey]>=2||S.tmUsed.mt1+S.tmUsed.mt2>=3){
@@ -681,6 +695,7 @@ function recordTM(team){
 }
 
 function clickActionMap(x,y){
+  if(S.readOnly) return;
   const ap=S.actionPanel; if(!ap) return;
   ap.mapX=Math.round(x); ap.mapY=Math.round(y);
   // Auto-validate non-shot actions (PB, PO, JF) when player + map position set
@@ -769,6 +784,7 @@ function checkGkConsecutiveAlert(){
 }
 
 function validateActionPanel(){
+  if(S.readOnly) return;
   const ap=S.actionPanel; if(!ap || !ap.shooterId) return;
   const act = ACTIONS[ap.type];
   const oppTeam = ap.team==="home"?"away":"home";
@@ -823,6 +839,7 @@ function validateActionPanel(){
 
 // Called by autoValidatePending: validate and fully close
 function validateAndClose(){
+  if(S.readOnly) return;
   const ap=S.actionPanel; if(!ap || !ap.shooterId) return;
   const act = ACTIONS[ap.type];
   const oppTeam = ap.team==="home"?"away":"home";
@@ -886,6 +903,7 @@ function selectPlayerForAction(playerId){
 }
 
 function recordEvent(type, team, x, y, playerId){
+  if(S.readOnly) return;
   const act = ACTIONS[type];
   const oppTeam = team==="home"?"away":"home";
   const gk = S[oppTeam].gkId;
@@ -931,6 +949,7 @@ function renderMatchSimple(){
 }
 
 function undoLast(){
+  if(S.readOnly) return;
   if(S.events.length===0) return;
   if(S.events[0]?.type==='PEN_OBT') S.penMode=false;
   const removed=S.events.shift();
@@ -1120,6 +1139,7 @@ function exportMatchCSV(){
 }
 
 function importMatchCSV(){
+  if(S.readOnly) return;
   const input=document.createElement("input");
   input.type="file"; input.accept=".csv";
   input.style.display="none";
@@ -1274,6 +1294,7 @@ async function importAllMatches(){
 }
 
 async function saveMatch(){
+  if(S.readOnly) return;
   const match={
     id:Date.now(),
     date:new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}),
@@ -1301,6 +1322,7 @@ async function markMatchFinished(){
 }
 
 function newMatch(){
+  if(S.readOnly) return;
   if(!safeConfirm("Nouveau match ? Les stats en cours seront perdues si non sauvegardées.")) return;
   stopTimer();
   // Increment journée
@@ -1581,6 +1603,7 @@ function renderMatchPanel(){
 }
 
 function deleteEvent(idx){
+  if(S.readOnly) return;
   const ev=S.events[idx]; if(!ev) return;
   const a=ACTIONS[ev.type];
   const pLabel=ev.playerNumber?`#${ev.playerNumber} ${ev.playerName||""}`:(ev.playerName||"");
@@ -1591,6 +1614,7 @@ function deleteEvent(idx){
 }
 
 function editEvent(idx){
+  if(S.readOnly) return;
   const ev=S.events[idx]; if(!ev) return;
   S.feedOpen=false;
   S._lastTeam=ev.team;
@@ -1677,13 +1701,17 @@ function renderMatch(){
       <button class="btn btn-sm ${S.mode==="simple"?"btn-g":""}" style="flex:1;" data-mode="simple">⚡ Simple</button>
       <button class="btn btn-sm ${S.mode==="expert"?"btn-g":""}" style="flex:1;" data-mode="expert">🎯 Expert</button>
     </div>
+    <button class="btn btn-sm ${S.readOnly?"btn-g":""}" style="width:100%;margin-bottom:5px;border-color:var(--yellow);color:${S.readOnly?"":"var(--yellow)"};" id="readonly-toggle-btn">${S.readOnly?"🔓 Désactiver le mode lecteur":"🔒 Activer le mode lecteur"}</button>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;" id="new-btn">🆕 Nouveau match</button>
     ${sbClient?`<button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--red);color:var(--red);" id="sign-out-btn">🔒 Se déconnecter</button>`:""}
     <button class="btn btn-sm" style="width:100%;border-color:var(--border);color:var(--t3);" id="close-settings">✕ Fermer</button>
   </div>`:"";
 
+  const readOnlyBannerHtml=S.readOnly?`<div class="readonly-banner">👁 Mode lecteur — saisie verrouillée</div>`:"";
+
   return `
-  <div class="match-layout poss-${S.possession}">
+  <div class="match-layout poss-${S.possession} ${S.readOnly?"is-readonly":""}">
+    ${readOnlyBannerHtml}
     <!-- COLONNE GAUCHE: équipes + timer -->
     <div class="ml-left">
       <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:var(--r2);border:1px solid var(--border);">
@@ -1746,11 +1774,11 @@ function renderMatch(){
     ${settingsHtml}
   </div>
 
-  <div class="feed-panel ${S.feedOpen?"open":""}">
+  <div class="feed-panel ${S.feedOpen?"open":""} ${S.readOnly?"is-readonly":""}">
     <div class="feed-panel-header">
       <span style="font-weight:700;color:var(--text);font-size:16px;">⚡ Fil du match (${S.events.length})</span>
       <div style="display:flex;gap:8px;">
-        ${S.events.length>0?`<button class="btn btn-sm" style="border-color:var(--red);color:var(--red);" id="undo-btn-feed">↩ Annuler dernier</button>`:""}
+        ${S.events.length>0?`<button class="btn btn-sm" style="border-color:var(--red);color:var(--red);${S.readOnly?"opacity:.35;pointer-events:none;":""}" id="undo-btn-feed">↩ Annuler dernier</button>`:""}
         <button class="btn btn-sm" id="close-feed" style="border-color:var(--border);color:var(--t2);">✕ Fermer</button>
       </div>
     </div>
@@ -3500,6 +3528,9 @@ function bind(){
   }; });
   // Mode Simple/Expert toggle
   document.querySelectorAll("[data-mode]").forEach(el=>{ el.onclick=()=>{ setMode(el.dataset.mode); }; });
+  // Mode lecteur (verrouillage de la saisie)
+  const readOnlyBtn=document.getElementById("readonly-toggle-btn");
+  if(readOnlyBtn) readOnlyBtn.onclick=()=>{ setReadOnly(!S.readOnly); };
   // Mode Simple: boutons de saisie rapide par équipe (auto-validation)
   document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
     const [team,type]=el.dataset.simple.split("|");
@@ -3680,13 +3711,13 @@ function bind(){
 
   // GK select
   document.querySelectorAll("[data-gk-sel]").forEach(el=>{
-    el.onchange=()=>{ S[el.dataset.gkSel].gkId=el.value||null; S.tmLastAlert=0; upsertMatchSnapshot(); R(); };
+    el.onchange=()=>{ if(S.readOnly)return; S[el.dataset.gkSel].gkId=el.value||null; S.tmLastAlert=0; upsertMatchSnapshot(); R(); };
   });
 
   // Timer
   const tt=document.getElementById("t-toggle"); if(tt) tt.onclick=()=>S.running?stopTimer():startTimer();
   const tr=document.getElementById("t-reset"); if(tr) tr.onclick=resetTimer;
-  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;upsertMatchSnapshot();R();};
+  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{if(S.readOnly)return;const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;upsertMatchSnapshot();R();};
 
   // Actions
   document.querySelectorAll("[data-act]").forEach(el=>{ el.onclick=()=>selectAction(el.dataset.act); });
@@ -3767,6 +3798,7 @@ function bind(){
   // 2min / Red card badges → open player select
   document.querySelectorAll("[data-badge]").forEach(el=>{
     el.onclick=()=>{
+      if(S.readOnly) return;
       const [side,type]=el.dataset.badge.split("|");
       S.selectedAction=type;
       S.playerSelect={type,team:side};
@@ -3777,6 +3809,7 @@ function bind(){
   // History: load/delete
   document.querySelectorAll("[data-load-match]").forEach(el=>{
     el.onclick=()=>{
+      if(S.readOnly) return;
       const id=parseInt(el.dataset.loadMatch);
       const m=S.matchHistory.find(x=>x.id===id); if(!m) return;
       if(!safeConfirm(`Charger ${m.home?.name} vs ${m.away?.name} (${m.journee||""}) ?\nLe match en cours sera remplacé.`)) return;
@@ -3829,10 +3862,11 @@ function bind(){
 
   // PD (assist) widget
   const pdBtn=document.getElementById("pd-btn");
-  if(pdBtn) pdBtn.onclick=()=>{S.pdSelect=true;R();};
+  if(pdBtn) pdBtn.onclick=()=>{if(S.readOnly)return;S.pdSelect=true;R();};
   // PD player selection
   document.querySelectorAll("[data-pick-pd]").forEach(el=>{
     el.onclick=()=>{
+      if(S.readOnly) return;
       const pid=el.dataset.pickPd;
       if(S.events.length>0){
         const ev=S.events[0];
@@ -3846,6 +3880,7 @@ function bind(){
   if(pdCancel) pdCancel.onclick=()=>{S.pdSelect=false;R();};
   const pdRemove=document.getElementById("pd-remove");
   if(pdRemove) pdRemove.onclick=()=>{
+    if(S.readOnly) return;
     if(S.events.length>0){ const ev=S.events[0]; ev.assistId=null; ev.assistName=null; ev.assistNumber=null; }
     S.pdSelect=false; R();
   };
