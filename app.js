@@ -1358,11 +1358,22 @@ async function saveMatch(){
   R();
 }
 
-// Marque le match Supabase courant comme terminé, pour qu'il arrête d'apparaître comme "reprenable"
-async function markMatchFinished(){
+// Marque un match Supabase comme terminé, pour qu'il arrête d'apparaître comme "reprenable"
+async function markMatchFinishedById(matchId){
   const client=initSupabaseClient();
-  if(!client||!S.currentMatchId) return;
-  try{ await client.from('matches').update({status:'finished'}).eq('id',S.currentMatchId); }catch(e){}
+  if(!client||!matchId) return;
+  try{ await client.from('matches').update({status:'finished'}).eq('id',matchId); }catch(e){}
+}
+async function markMatchFinished(){ return markMatchFinishedById(S.currentMatchId); }
+
+// Abandonne un match proposé comme "reprenable" (écran de reprise) — le marque terminé côté
+// Supabase (les données/événements déjà saisis restent disponibles, juste plus proposé au
+// démarrage) et le retire immédiatement de la liste affichée.
+async function discardResumableMatch(matchId){
+  if(!safeConfirm("Abandonner ce match ? Il ne sera plus proposé au démarrage. Les données déjà saisies restent conservées sur Supabase.")) return;
+  await markMatchFinishedById(matchId);
+  S.resumePrompt=(S.resumePrompt||[]).filter(m=>m.id!==matchId);
+  R();
 }
 
 // Supprime réellement un match sur Supabase (ligne matches + tous ses match_events) — best-effort,
@@ -1426,7 +1437,10 @@ function renderResumePrompt(){
             <div style="font-size:10px;font-weight:800;color:var(--fenix-sky);letter-spacing:.06em;margin-bottom:4px;">🟢 EN COURS</div>
             <div style="font-weight:700;font-size:15px;margin-bottom:2px;">${m.home_name} vs ${m.away_name}</div>
             <div style="font-size:11px;color:var(--t2);margin-bottom:10px;">Débuté ${ago(m.created_at)}</div>
-            <button class="btn btn-g" style="width:100%;" data-resume-match="${m.id}">Reprendre →</button>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-g" style="flex:1;" data-resume-match="${m.id}">Reprendre →</button>
+              <button class="btn btn-sm" style="border-color:var(--red);color:var(--red);" data-discard-match="${m.id}" title="Abandonner ce match">🗑</button>
+            </div>
           </div>
         `).join("")}
       </div>
@@ -3574,6 +3588,9 @@ function bind(){
   };
   document.querySelectorAll("[data-resume-match]").forEach(el=>{
     el.onclick=()=>resumeMatch(el.dataset.resumeMatch);
+  });
+  document.querySelectorAll("[data-discard-match]").forEach(el=>{
+    el.onclick=()=>discardResumableMatch(el.dataset.discardMatch);
   });
   const dismissBtn=document.getElementById("dismiss-resume");
   if(dismissBtn) dismissBtn.onclick=()=>dismissResumePrompt();
