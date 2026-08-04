@@ -208,6 +208,7 @@ TM:       { needsMap:false, isTM:true }
 - **STORY-15** — Indicateur discret de statut de synchronisation (✓ sync / ↻ envoi… / ⚠ hors-ligne) dans le bandeau haut de l'écran Match, absorbe/remplace définitivement STORY-06 (bandeau d'export manuel, superseded)
 - **STORY-16** — Audit de clarté d'interface pour un aidant occasionnel : critères déjà satisfaits par le code existant (icône+label toujours ensemble sur les boutons d'action, bouton "↩ Annuler" aussi visible que les actions principales) — aucun changement de code nécessaire, confirmé par test réel CDP. Le Mode Simple (STORY-23/24) répond en pratique mieux encore au besoin initial de cette story.
 - **STORY-17** — Documentation de clonage pour un autre coach (voir section "Cloner ce projet" ci-dessous)
+- **STORY-27** — Suppression réelle d'un match sur Supabase (`matches` + `match_events`) quand il est supprimé de l'historique local — QA PASSED, Security Auditor feu vert, Regression Guardian RAS (36/36). Limite acceptée : ne s'applique qu'aux matchs sauvegardés après cette story (ceux d'avant n'ont pas l'identifiant Supabase nécessaire pour être nettoyés a posteriori)
 - Corrections hors-cycle : validation d'ajout de joueur adverse assouplie (nom OU numéro suffit, plus seulement numéro) ; import CSV ignorant désormais la ligne d'en-tête (évitait un joueur fantôme "Nom"/DC au ré-import) ; synchronisation temps réel du chrono/mi-temps (nécessitait un abonnement realtime séparé sur la table `matches`, en plus de celui sur `match_events`)
 
 ## Cloner ce projet pour un autre coach/équipe (STORY-17)
