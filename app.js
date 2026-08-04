@@ -1347,6 +1347,7 @@ async function saveMatch(){
     events:[...S.events], time:S.time, period:S.period,
     scoreH:teamScore("home"), scoreA:teamScore("away"),
     coachNotes:S.coachNotes||"",
+    supabaseMatchId:S.currentMatchId||null, // pour pouvoir supprimer aussi côté Supabase si ce match est effacé plus tard
   };
   try{
     await dbSaveMatch(match);
@@ -1362,6 +1363,18 @@ async function markMatchFinished(){
   const client=initSupabaseClient();
   if(!client||!S.currentMatchId) return;
   try{ await client.from('matches').update({status:'finished'}).eq('id',S.currentMatchId); }catch(e){}
+}
+
+// Supprime réellement un match sur Supabase (ligne matches + tous ses match_events) — best-effort,
+// appelé quand un match sauvegardé est supprimé localement. Les match_events doivent être supprimés
+// avant la ligne matches (pas de ON DELETE CASCADE dans le schéma, cf. docs/supabase-setup.sql).
+async function deleteSupabaseMatch(matchId){
+  const client=initSupabaseClient();
+  if(!client||!matchId) return;
+  try{
+    await client.from('match_events').delete().eq('match_id',matchId);
+    await client.from('matches').delete().eq('id',matchId);
+  }catch(e){ /* best-effort : la suppression Supabase peut échouer hors-ligne, pas de retry dédié */ }
 }
 
 function newMatch(){
@@ -3877,8 +3890,13 @@ function bind(){
   document.querySelectorAll("[data-del-match]").forEach(el=>{
     el.onclick=async()=>{
       const id=parseInt(el.dataset.delMatch);
-      if(!safeConfirm("Supprimer ce match ?")) return;
-      try{ await dbDelete(id); S.matchHistory=await dbGetAll(); }catch(e){ console.error(e); }
+      if(!safeConfirm("Supprimer ce match ? Action définitive, y compris sur les autres appareils synchronisés.")) return;
+      const m=S.matchHistory.find(x=>x.id===id);
+      try{
+        await dbDelete(id);
+        S.matchHistory=await dbGetAll();
+        if(m?.supabaseMatchId) deleteSupabaseMatch(m.supabaseMatchId); // best-effort, ne bloque jamais la suppression locale
+      }catch(e){ console.error(e); }
       R();
     };
   });
