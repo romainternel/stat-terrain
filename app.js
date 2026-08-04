@@ -1763,18 +1763,24 @@ function renderMatch(){
   }
 
   const settingsHtml=S.settingsOpen?`<div class="settings-panel" id="settings-panel">
+    <div class="settings-group-label">Match</div>
     <button class="btn btn-sm btn-g" id="save-match-btn" style="width:100%;margin-bottom:5px;">💾 Sauvegarder</button>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--fenix-sky);color:var(--fenix-sky);" id="export-match">📤 Exporter</button>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--yellow);color:var(--yellow);" id="import-match">📥 Importer</button>
     <button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--fenix-sky);color:var(--fenix-sky);" data-v="setup">✏️ Effectifs</button>
+    <button class="btn btn-sm" style="width:100%;margin-bottom:5px;" id="new-btn">🆕 Nouveau match</button>
+
+    <div class="settings-group-label">Affichage</div>
     <div style="display:flex;gap:5px;margin-bottom:5px;">
       <button class="btn btn-sm ${S.mode==="simple"?"btn-g":""}" style="flex:1;" data-mode="simple">⚡ Simple</button>
       <button class="btn btn-sm ${S.mode==="expert"?"btn-g":""}" style="flex:1;" data-mode="expert">🎯 Expert</button>
     </div>
-    <button class="btn btn-sm ${S.readOnly?"btn-g":""}" style="width:100%;margin-bottom:5px;border-color:var(--yellow);color:${S.readOnly?"":"var(--yellow)"};" id="readonly-toggle-btn">${S.readOnly?"🔓 Désactiver le mode lecteur":"🔒 Activer le mode lecteur"}</button>
-    <button class="btn btn-sm" style="width:100%;margin-bottom:5px;" id="new-btn">🆕 Nouveau match</button>
-    ${sbClient?`<button class="btn btn-sm" style="width:100%;margin-bottom:5px;border-color:var(--red);color:var(--red);" id="sign-out-btn">🔒 Se déconnecter</button>`:""}
-    <button class="btn btn-sm" style="width:100%;border-color:var(--border);color:var(--t3);" id="close-settings">✕ Fermer</button>
+    <button class="btn btn-sm ${S.readOnly?"btn-g":""}" style="width:100%;border-color:var(--yellow);color:${S.readOnly?"":"var(--yellow)"};" id="readonly-toggle-btn">${S.readOnly?"🔓 Désactiver le mode lecteur":"🔒 Activer le mode lecteur"}</button>
+
+    ${sbClient?`<div class="settings-group-label">Compte</div>
+    <button class="btn btn-sm" style="width:100%;border-color:var(--red);color:var(--red);" id="sign-out-btn">🔒 Se déconnecter</button>`:""}
+
+    <button class="btn btn-sm" style="width:100%;margin-top:10px;border-color:var(--border);color:var(--t3);" id="close-settings">✕ Fermer</button>
   </div>`:"";
 
   const readOnlyBannerHtml=S.readOnly?`<div class="readonly-banner">👁 Mode lecteur — saisie verrouillée</div>`:"";
