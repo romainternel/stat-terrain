@@ -2784,7 +2784,6 @@ function renderStatCompare(){
   const aPd=S.events.filter(e=>e.team==="away"&&e.assistId).length;
   const hPoss=teamPoss("home"), aPoss=teamPoss("away");
   const stats = [
-    {l:"Possessions",a:hPoss,b:aPoss,ra:hPoss,rb:aPoss},
     {l:"Buts/Tirs",a:hGoals+"/"+hTotal,b:aGoals+"/"+aTotal,ra:hGoals,rb:aGoals},
     {l:"Efficacité",a:hEff+"%",b:aEff+"%",ra:hEff,rb:aEff},
     {l:"Arrêts GB",a:hGkSaves,b:aGkSaves,ra:hGkSaves,rb:aGkSaves},
@@ -2796,6 +2795,7 @@ function renderStatCompare(){
     {l:"Jet franc",a:teamStat("home","FREEKICK"),b:teamStat("away","FREEKICK"),ra:teamStat("home","FREEKICK"),rb:teamStat("away","FREEKICK")},
     {l:"2 min",a:teamStat("home","TWO_MIN"),b:teamStat("away","TWO_MIN"),ra:teamStat("home","TWO_MIN"),rb:teamStat("away","TWO_MIN")},
     {l:"Carton R",a:teamStat("home","RED"),b:teamStat("away","RED"),ra:teamStat("home","RED"),rb:teamStat("away","RED")},
+    {l:"Possessions",a:hPoss,b:aPoss,ra:hPoss,rb:aPoss},
   ];
   // Score evolution data - parse time to continuous minutes (MT2 = +30)
   function timeToMin(timeStr, period){
@@ -3186,7 +3186,6 @@ function renderBilanMatch(){
 
   // Comparison bars
   const rows=[
-    {l:"Possessions",a:ms.home.poss,b:ms.away.poss},
     {l:"Buts",a:ms.home.goals,b:ms.away.goals},
     {l:"Efficacité",a:ms.home.eff+"%",b:ms.away.eff+"%",ra:ms.home.eff,rb:ms.away.eff},
     {l:"Tirs",a:ms.home.total,b:ms.away.total},
@@ -3196,6 +3195,7 @@ function renderBilanMatch(){
     {l:"Jet franc",a:ms.home.freekick,b:ms.away.freekick},
     {l:"2 min",a:ms.home.twoMin,b:ms.away.twoMin},
     {l:"Carton R",a:ms.home.red,b:ms.away.red},
+    {l:"Possessions",a:ms.home.poss,b:ms.away.poss},
   ];
   html+=`<div style="margin-bottom:16px;">
     ${rows.map(s=>{
