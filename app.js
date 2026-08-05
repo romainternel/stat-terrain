@@ -45,7 +45,7 @@ function gid(){
 function freshState(){
   return {
     view:"setup", // setup | match | stats
-    statsTab:"gk", // compare | gk
+    statsTab:"compare", // compare | gk
     evoFilter:"all", // all | mt1 | mt2
     home:{name:"FENIX Toulouse",photo:null,players:[],gkId:null},
     away:{name:"Adversaire",photo:null,players:[],gkId:null},
@@ -1398,6 +1398,7 @@ function newMatch(){
   S.playerSelect=null; S.pendingPlayer=null; S.penResultSelect=null; S.pdSelect=false;
   S.actionPanel=null; S.penMode=false;
   S.tmUsed={mt1:0,mt2:0}; S.tmLastAlert=0; S.coachNotes="";
+  S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
   S.journee="J"+(jNum+1);
   S.away.name="Adversaire";
   markMatchFinished(); // l'ancien match ne doit plus apparaître comme "reprenable" une fois abandonné
@@ -2989,102 +2990,110 @@ function renderGkDetailTables(){
   </div>`;
 }
 
-function renderStatGk(){
-  let html = `<div class="stat-courts">
-    ${["home","away"].map(side=>{
-      const t=S[side]; const color=side==="home"?"var(--green)":"var(--red)";
-      const gbs=selectedGbs(side);
-      const filter=S.gkFilter[side];
-      // Resolve stats based on filter
-      const isAll=filter==="all";
-      const gk = isAll ? gkStatsCombined(gbs.map(g=>g.id)) : gkStats(filter);
-      const filterGb = !isAll ? gbs.find(g=>g.id===filter) : null;
-      const name = isAll ? "Tous les GB" : (filterGb ? (filterGb.number?"#"+filterGb.number+" ":"")+filterGb.name : "—");
+function renderGkSheet(side){
+  const t=S[side]; const color=side==="home"?"var(--green)":"var(--red)";
+  const oppSide=side==="home"?"away":"home";
+  const gbs=selectedGbs(side);
+  const filter=S.gkFilter[side];
+  const isAll=filter==="all";
+  const gk = isAll ? gkStatsCombined(gbs.map(g=>g.id)) : gkStats(filter);
+  const accentRgb = side==="home" ? "95,168,211" : "232,70,90";
 
-      return `<div class="card" style="text-align:center;position:relative;">
-        <button class="fs-btn" title="Plein écran">⛶</button>
-        <div class="card-t" style="color:${color}">🧤 ${t.name}</div>
-        <!-- GK Filter -->
-        <div style="display:flex;justify-content:center;gap:4px;margin-bottom:10px;flex-wrap:wrap;">
-          <button class="btn btn-xs ${isAll?"btn-g":""}" data-gk-filter="${side}|all" style="${isAll?"":"opacity:.5"}">Tout</button>
-          ${gbs.slice(0,3).map(gb=>{
-            const sel=filter===gb.id;
-            const lbl=gb.number?"#"+gb.number:"GB";
-            return `<button class="btn btn-xs ${sel?"btn-g":""}" data-gk-filter="${side}|${gb.id}" style="${sel?"":"opacity:.5"}">${lbl} ${gb.name}</button>`;
-          }).join("")}
-        </div>
-        <div style="font-size:16px;font-weight:700;margin-bottom:10px;">${name}</div>
-        <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;">
-          <div><div class="mono" style="font-size:32px;font-weight:800;color:var(--blue)">${gk.saves}</div><div style="font-size:12px;color:var(--t2)">ARRÊTS</div></div>
-          <div><div class="mono" style="font-size:32px;font-weight:800;color:var(--red)">${gk.goals}</div><div style="font-size:12px;color:var(--t2)">ENCAISSÉS</div></div>
-          <div><div class="mono" style="font-size:32px;font-weight:800;color:var(--orange)">${gk.offs}</div><div style="font-size:12px;color:var(--t2)">H. CADRE</div></div>
-          <div><div class="mono" style="font-size:32px;font-weight:800;color:var(--yellow)">${gk.pct}</div><div style="font-size:12px;color:var(--t2)">% ARRÊTS</div></div>
-          <div><div class="mono" style="font-size:32px;font-weight:800;color:var(--text)">${gk.total}</div><div style="font-size:12px;color:var(--t2)">TIRS CADRÉS</div></div>
-        </div>
+  // GB selector: dropdown (2+ GB), static label (1 GB), or nothing (0 GB, handled by empty state below)
+  let gbSelectorHtml="";
+  if(gbs.length>=2){
+    gbSelectorHtml=`<select class="gk-filter-select" data-gk-filter-select="${side}" style="color:${side==="home"?"var(--fenix-sky)":"var(--red)"};border:1px solid rgba(${accentRgb},.30);">
+      <option value="all" ${isAll?"selected":""}>Tous les GB</option>
+      ${gbs.map(gb=>{
+        const lbl=(gb.number?"#"+gb.number+" ":"")+gb.name;
+        return `<option value="${gb.id}" ${filter===gb.id?"selected":""}>${lbl}</option>`;
+      }).join("")}
+    </select>`;
+  } else if(gbs.length===1){
+    const gb=gbs[0];
+    gbSelectorHtml=`<div style="font-weight:700;font-size:12px;color:${side==="home"?"var(--fenix-sky)":"var(--red)"};">${(gb.number?"#"+gb.number+" ":"")+gb.name}</div>`;
+  }
+
+  // Numbers column: 3-level hierarchy, or empty state if no GK selected
+  let numsHtml;
+  if(gbs.length===0){
+    numsHtml=`<div class="gk-col-empty"><div style="font-size:22px;opacity:.5;">🧤</div><div style="color:var(--t3);font-size:12px;">Aucun gardien sélectionné</div></div>`;
+  } else {
+    numsHtml=`
+      <div class="mono gk-lvl1" style="color:var(--gk-save);">${gk.saves}/${gk.total}</div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-top:2px;">ARRÊTS</div>
+      <div class="mono gk-lvl2" style="color:var(--yellow);margin-top:12px;">${gk.pct}</div>
+      <div class="gk-pill-group" style="margin-top:16px;">
+        <span class="gk-pill" style="--gk-pill-rgb:80,200,120;"><span class="gk-pill-dot"></span>${gk.goals} encaissés</span>
+        <span class="gk-pill" style="--gk-pill-rgb:232,154,78;"><span class="gk-pill-dot"></span>${gk.offs} hors cadre</span>
       </div>`;
-    }).join("")}
-  </div>`;
+  }
 
-  // Detail tables
-  html += renderGkDetailTables();
-
-  // Shot maps per side (filtered by GK)
+  // Court column: heatmap + shot map, filtered by GK selection AND shot-type filter
   const sf=S.gkShotFilter;
-  html += `<div style="display:flex;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap;">
+  const gkIds = filter==="all" ? gbs.map(g=>g.id) : [filter];
+  const allShots = S.events.filter(e=>e.team===oppSide && (ACTIONS[e.type].needsMap) && e.x!=null && gkIds.includes(e.gkId));
+  const shots = allShots.filter(s=>{
+    if(ACTIONS[s.type].isGoal) return sf.goals;
+    if(ACTIONS[s.type].isSave) return sf.saves;
+    if(ACTIONS[s.type].isOff) return sf.offs;
+    return true;
+  });
+  const goals=allShots.filter(s=>ACTIONS[s.type].isGoal).length;
+  const saves=allShots.filter(s=>ACTIONS[s.type].isSave).length;
+  const offs=allShots.filter(s=>ACTIONS[s.type].isOff).length;
+
+  const courtHtml=`
+    ${goalZoneHeatmap(allShots,"88%")}
+    <svg viewBox="0 0 350 208" style="width:100%;max-width:420px;display:block;margin:6px auto 0;border-radius:6px;border:1px solid var(--border);" xmlns="http://www.w3.org/2000/svg">
+      ${courtSvgMarkup()}
+      ${shots.map(s=>{
+        const c = ACTIONS[s.type].isSave?"#4ECDE8":ACTIONS[s.type].isGoal?"#50C878":"#E89A4E";
+        if(ACTIONS[s.type].isGoal){
+          return `<circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
+        }
+        return `<g>
+          <circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}44" stroke="${c}" stroke-width="1"/>
+          <line x1="${s.x-2}" y1="${s.y-2}" x2="${s.x+2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="${s.x+2}" y1="${s.y-2}" x2="${s.x-2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+        </g>`;
+      }).join("")}
+    </svg>
+    <div style="display:flex;justify-content:center;gap:14px;margin-top:8px;">
+      <div style="text-align:center;${sf.saves?"":"opacity:.3"}"><div class="mono" style="font-size:22px;font-weight:800;color:var(--green)">${saves}</div><div style="font-size:11px;color:var(--t2)">ARRÊTÉS</div></div>
+      <div style="text-align:center;${sf.goals?"":"opacity:.3"}"><div class="mono" style="font-size:22px;font-weight:800;color:var(--red)">${goals}</div><div style="font-size:11px;color:var(--t2)">ENCAISSÉS</div></div>
+      <div style="text-align:center;${sf.offs?"":"opacity:.3"}"><div class="mono" style="font-size:22px;font-weight:800;color:var(--orange)">${offs}</div><div style="font-size:11px;color:var(--t2)">H. CADRE</div></div>
+    </div>`;
+
+  return `<div class="card gk-sheet" style="position:relative;--gk-accent-rgb:${accentRgb};">
+    <button class="fs-btn" title="Plein écran">⛶</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding-right:34px;">
+      <div class="card-t" style="color:${color};margin-bottom:0;">🧤 ${t.name}</div>
+      ${gbSelectorHtml}
+    </div>
+    <div class="gk-sheet-body">
+      <div class="gk-sheet-nums fade-in">${numsHtml}</div>
+      <div class="gk-sheet-court fade-in">${courtHtml}</div>
+    </div>
+  </div>`;
+}
+
+function renderStatGk(){
+  const sf=S.gkShotFilter;
+  let html = `<div style="display:flex;justify-content:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
     <span style="font-size:11px;color:var(--t2);align-self:center;">Filtrer :</span>
     <button class="btn btn-xs" data-shot-filter="goals" style="background:${sf.goals?"rgba(80,200,120,.2)":"rgba(255,255,255,.03)"};border-color:${sf.goals?"#50C878":"var(--border)"};color:${sf.goals?"#50C878":"var(--t3)"};${sf.goals?"":"opacity:.4;text-decoration:line-through;"}">● Encaissés</button>
     <button class="btn btn-xs" data-shot-filter="saves" style="background:${sf.saves?"rgba(78,205,232,.2)":"rgba(255,255,255,.03)"};border-color:${sf.saves?"#4ECDE8":"var(--border)"};color:${sf.saves?"#4ECDE8":"var(--t3)"};${sf.saves?"":"opacity:.4;text-decoration:line-through;"}">✕ Arrêtés</button>
     <button class="btn btn-xs" data-shot-filter="offs" style="background:${sf.offs?"rgba(232,154,78,.2)":"rgba(255,255,255,.03)"};border-color:${sf.offs?"#E89A4E":"var(--border)"};color:${sf.offs?"#E89A4E":"var(--t3)"};${sf.offs?"":"opacity:.4;text-decoration:line-through;"}">✕ Hors cadre</button>
   </div>`;
 
-  html += `<div class="stat-courts" style="margin-top:8px;">
-    ${["home","away"].map(side=>{
-      const t=S[side]; const color=side==="home"?"var(--green)":"var(--red)";
-      const oppSide=side==="home"?"away":"home";
-      const filter=S.gkFilter[side];
-      const gbs=selectedGbs(side);
-      // Shots FROM opponent that this GK(s) faced
-      const gkIds = filter==="all" ? gbs.map(g=>g.id) : [filter];
-      const allShots = S.events.filter(e=>e.team===oppSide && (ACTIONS[e.type].needsMap) && e.x!=null && gkIds.includes(e.gkId));
-      // Apply shot type filter
-      const shots = allShots.filter(s=>{
-        if(ACTIONS[s.type].isGoal) return sf.goals;
-        if(ACTIONS[s.type].isSave) return sf.saves;
-        if(ACTIONS[s.type].isOff) return sf.offs;
-        return true;
-      });
-      const goals=allShots.filter(s=>ACTIONS[s.type].isGoal).length;
-      const saves=allShots.filter(s=>ACTIONS[s.type].isSave).length;
-      const offs=allShots.filter(s=>ACTIONS[s.type].isOff).length;
-      const filterGb = filter!=="all" ? gbs.find(g=>g.id===filter) : null;
-      const mapTitle = filterGb ? (filterGb.number?"#"+filterGb.number+" ":"")+filterGb.name : "Tous les GB";
-      return `<div class="card" style="position:relative;">
-        <button class="fs-btn" title="Plein écran">⛶</button>
-        <div class="card-t" style="color:${color};text-align:center;">🎯 Tirs subis — ${t.name} <span style="font-weight:400;font-size:11px;color:var(--t2);">(${mapTitle})</span></div>
-        ${goalZoneHeatmap(allShots,"40%")}
-        <svg viewBox="0 0 350 208" style="width:100%;max-width:420px;display:block;margin:0 auto;border-radius:6px;border:1px solid var(--border);" xmlns="http://www.w3.org/2000/svg">
-          ${courtSvgMarkup()}
-          ${shots.map(s=>{
-            const c = ACTIONS[s.type].isSave?"#4ECDE8":ACTIONS[s.type].isGoal?"#50C878":"#E89A4E";
-            if(ACTIONS[s.type].isGoal){
-              return `<circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
-            }
-            return `<g>
-              <circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}44" stroke="${c}" stroke-width="1"/>
-              <line x1="${s.x-2}" y1="${s.y-2}" x2="${s.x+2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="${s.x+2}" y1="${s.y-2}" x2="${s.x-2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
-            </g>`;
-          }).join("")}
-        </svg>
-        <div style="display:flex;justify-content:center;gap:14px;margin-top:8px;">
-          <div style="text-align:center;${sf.saves?"":"opacity:.3"}"><div class="mono" style="font-size:22px;font-weight:800;color:var(--green)">${saves}</div><div style="font-size:11px;color:var(--t2)">ARRÊTÉS</div></div>
-          <div style="text-align:center;${sf.goals?"":"opacity:.3"}"><div class="mono" style="font-size:22px;font-weight:800;color:var(--red)">${goals}</div><div style="font-size:11px;color:var(--t2)">ENCAISSÉS</div></div>
-          <div style="text-align:center;${sf.offs?"":"opacity:.3"}"><div class="mono" style="font-size:22px;font-weight:800;color:var(--orange)">${offs}</div><div style="font-size:11px;color:var(--t2)">H. CADRE</div></div>
-        </div>
-      </div>`;
-    }).join("")}
-  </div>
-  <div style="display:flex;justify-content:center;gap:16px;margin-top:8px;font-size:11px;color:var(--t2);">
+  html += `<div class="stat-courts">
+    ${["home","away"].map(side=>renderGkSheet(side)).join("")}
+  </div>`;
+
+  html += renderGkDetailTables();
+
+  html += `<div style="display:flex;justify-content:center;gap:16px;margin-top:8px;font-size:11px;color:var(--t2);">
     <span><span style="color:#50C878">●</span> But</span>
     <span><span style="color:var(--red)">✕</span> Arrêté</span>
     <span><span style="color:var(--orange)">✕</span> Hors cadre</span>
@@ -3657,11 +3666,10 @@ function bind(){
     S.bilanMatch=S.matchHistory.find(m=>m.id===id)||null;
     R();
   };
-  // GK filter buttons
-  document.querySelectorAll("[data-gk-filter]").forEach(el=>{
-    el.onclick=()=>{
-      const [side,val]=el.dataset.gkFilter.split("|");
-      S.gkFilter[side]=val;
+  // GK filter select (STORY-30)
+  document.querySelectorAll("[data-gk-filter-select]").forEach(el=>{
+    el.onchange=()=>{
+      S.gkFilter[el.dataset.gkFilterSelect]=el.value;
       R();
     };
   });
@@ -3901,6 +3909,7 @@ function bind(){
       S.coachNotes=m.coachNotes||"";
       S.selectedAction=null; S.shotOverlay=null; S.playerSelect=null;
       S.penResultSelect=null; S.pdSelect=false; S.actionPanel=null; S.penMode=false;
+      S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
       // Recalculate TM usage from events
       S.tmUsed={mt1:0,mt2:0};
       S.events.filter(e=>e.type==="TM"&&e.team==="home").forEach(e=>{
