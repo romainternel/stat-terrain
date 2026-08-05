@@ -713,8 +713,10 @@ function clickGoalZone(zone){
 function clickCourtPosition(x,y){
   if(S.readOnly) return;
   const ap=S.actionPanel; if(!ap||!ap.shooterId) return;
+  const act=ACTIONS[ap.type];
   ap.mapX=x; ap.mapY=y;
-  if(!S.trackGK){ validateAndClose(); }
+  // Tir non cadré : pas de zone de but à demander, il n'y a pas d'impact dans le but par définition
+  if(!S.trackGK || act.isOff){ validateAndClose(); }
   R();
 }
 
@@ -1066,7 +1068,8 @@ function goalZoneHeatmap(shots, width){
     else counts[z].offs++;
   });
   const maxC=Math.max(...ZONES.map(z=>counts[z].total),1);
-  return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:1px;width:${w};margin:0 auto;aspect-ratio:5/2;border-radius:4px 4px 0 0;overflow:hidden;border:2px solid var(--border);border-bottom:3px solid var(--fenix-sky);">
+  return `<div style="font-style:italic;font-size:10px;color:var(--t3);text-align:center;width:${w};margin:0 auto 3px;">Stat des tireurs (ex : 1/1 = 1 but et non arrêt)</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:1px;width:${w};margin:0 auto;aspect-ratio:5/2;border-radius:4px 4px 0 0;overflow:hidden;border:2px solid var(--border);border-bottom:3px solid var(--fenix-sky);">
     ${ZONES.map(z=>{
       const c=counts[z]; const opacity=c.total>0?(.2+.8*(c.total/maxC)):0;
       const gPct=c.total>0?c.goals/c.total:0;
@@ -1636,7 +1639,7 @@ function renderMatchPanel(){
 
   // SHOT MODE: étape 1 = terrain, étape 2 = overlay zone de but (terrain bloqué)
   if(shotMode){
-    const showGZ=S.trackGK&&ap.mapX!=null;
+    const showGZ=S.trackGK&&ap.mapX!=null&&!act.isOff;
     return `<div style="margin-top:2px;">
       ${statusHtml}
       <div class="court-pick" style="cursor:${showGZ?"default":"crosshair"};">
