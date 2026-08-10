@@ -22,9 +22,9 @@ const ACTIONS = {
   OFF:      {label:"Tir non cadré",icon:"↗", color:"var(--orange)",needsMap:true, isOff:true},
   TURNOVER: {label:"PB",         icon:"↩",  color:"var(--red)",    needsMap:true},
   PEN_OBT:  {label:"PO",         icon:"📣", color:"var(--yellow)", needsMap:true},
-  PEN_GOAL: {label:"But Pen",    icon:"⚽", color:"var(--green)",  needsMap:true, isGoal:true, isPen:true},
-  PEN_SAVE: {label:"Arrêt Pen",  icon:"🧤", color:"var(--blue)",   needsMap:true, isSave:true, isPen:true},
-  PEN_OFF:  {label:"Pen HC",     icon:"↗",  color:"var(--orange)", needsMap:true, isOff:true, isPen:true},
+  PEN_GOAL: {label:"But Pen",    icon:"⚽", color:"var(--gk-goal)",needsMap:true, isGoal:true, isPen:true},
+  PEN_SAVE: {label:"Arrêt Pen",  icon:"🧤", color:"var(--gk-save)",needsMap:true, isSave:true, isPen:true},
+  PEN_OFF:  {label:"Pen HC",     icon:"↗",  color:"var(--gk-off)", needsMap:true, isOff:true, isPen:true},
   PEN:      {label:"Pen",        icon:"🎯", color:"var(--yellow)", needsMap:false},
   FREEKICK: {label:"Jet franc",  icon:"🔄", color:"var(--purple)", needsMap:true},
   TWO_MIN:  {label:"2 min",      icon:"⏱",  color:"#FF6B6B",      needsMap:false, isExcl:true},
@@ -68,9 +68,10 @@ function freshState(){
     gkFilter:{home:"all",away:"all"}, // "all" or specific gkId
     gkShotFilter:{goals:true,saves:true,offs:true}, // toggle shot types on maps
     matchHistory:[], // cached from IndexedDB
-    bilanTab:"match", // match | saison
+    bilanTab:"match", // match | analyse | saison
     bilanMatchId:null, // selected match id for review
     bilanMatch:null, // loaded match data for review
+    bilanNotesDraft:null, // brouillon des notes coach en cours d'édition dans Bilan (jamais persisté)
     importModal:null, // 'home'|'away'|null
     gkTimeline:false, // open/close GK timeline overlay
     tmUsed:{mt1:0,mt2:0}, // timeouts used per half (max 2/half, 3 total)
@@ -109,6 +110,15 @@ try { S.readOnly = localStorage.getItem("hb2_readonly")==="1"; } catch(e){}
 
 function setReadOnly(val){
   S.readOnly=val;
+  if(val){
+    // Ferme proprement une éventuelle transaction pénalty en cours sur cet appareil — sinon
+    // le bouton ✕ Fermer lui-même devient inutilisable (garde if(S.readOnly) return; de closePenPanel()),
+    // gelant l'encart à l'écran tant que le mode lecteur reste actif. Le PEN_OBT déjà enregistré,
+    // s'il y en a un, n'est jamais touché ici.
+    S.actionPanel=null;
+    S.selectedAction=null;
+    S.penMode=false;
+  }
   try{ localStorage.setItem("hb2_readonly", val?"1":"0"); }catch(e){}
   R();
 }
@@ -606,6 +616,7 @@ function renderTimer(){ const el=document.getElementById("tmr"); if(el) el.textC
 // ═══════════════════════════════════════════════════════
 function autoValidatePending(){
   const ap=S.actionPanel;
+  if(!ap || !ap.type || !ACTIONS[ap.type]) return;
   if(ap && ap.shooterId){
     validateAndClose();
   }
@@ -614,6 +625,7 @@ function autoValidatePending(){
 
 function selectAction(type){
   if(S.readOnly) return;
+  if(S.penMode) return;
   autoValidatePending();
   S.penResultSelect = null;
   S.selectedAction = S.selectedAction===type ? null : type;
@@ -624,6 +636,7 @@ function selectAction(type){
 
 function clickTeam(team){
   if(S.readOnly) return;
+  if(S.penMode) return;
   if(!S.selectedAction) return;
   autoValidatePending();
   S._lastTeam = team;
@@ -665,23 +678,22 @@ function clickActionPlayer(playerId){
     S.actionPanel={type:S.selectedAction, team:S.possession, shooterId:null, pdId:null, mapX:null, mapY:null, goalZone:null};
   }
   const ap=S.actionPanel;
+  if(S.penMode && !ap.type){
+    // Étape "3 boutons" du pénalty (désignation ou réassignation du tireur, y compris après
+    // une remise à zéro par la revalidation du tireur, STORY-33 P1-4) — jamais de validation ici,
+    // et jamais d'accès à ACTIONS[ap.type] puisque ap.type est intentionnellement null à ce stade.
+    ap.shooterId = (ap.shooterId===playerId) ? null : playerId;
+    R(); return;
+  }
   const act=ACTIONS[ap.type];
   if(!ap.shooterId){
-    // PenMode: convert GOAL/SAVE/OFF → PEN_GOAL/PEN_SAVE/PEN_OFF
-    if(S.penMode && (act.isGoal||act.isSave||act.isOff)){
-      ap.shooterId=playerId;
-      const penMap={GOAL:'PEN_GOAL',SAVE:'PEN_SAVE',OFF:'PEN_OFF'};
-      ap.type=penMap[ap.type]||ap.type;
-      ap.mapX=50; ap.mapY=85;
-      validateAndClose();
-      S.penMode=false;
-      R(); return;
-    }
     ap.shooterId=playerId;
-    // PO: record player, activate penMode
+    // PO: record player, activate penMode, open the on-court outcome panel
     if(ap.type==='PEN_OBT'){
-      validateAndClose();
+      const team=ap.team;
+      validateAndClose();              // enregistre le PEN_OBT, inchangé — événement définitif, indépendant de l'issue qui suivra
       S.penMode=true;
+      S.actionPanel={type:null, team, shooterId:playerId, pdId:null, mapX:null, mapY:null, goalZone:null};
       R(); return;
     }
     // Shot actions (GOAL/SAVE/OFF): switch to position or goal zone mode
@@ -717,6 +729,27 @@ function clickCourtPosition(x,y){
   ap.mapX=x; ap.mapY=y;
   // Tir non cadré : pas de zone de but à demander, il n'y a pas d'impact dans le but par définition
   if(!S.trackGK || act.isOff){ validateAndClose(); }
+  R();
+}
+
+function choosePenOutcome(kind){          // kind: 'GOAL' | 'SAVE' | 'OFF'
+  if(S.readOnly) return;
+  const ap=S.actionPanel; if(!ap||!ap.shooterId) return;
+  const penMap={GOAL:'PEN_GOAL',SAVE:'PEN_SAVE',OFF:'PEN_OFF'};
+  ap.type=penMap[kind];
+  ap.mapX=50; ap.mapY=85;                 // position fixe, comme aujourd'hui
+  const act=ACTIONS[ap.type];
+  if(!S.trackGK || act.isOff){
+    validateAndClose();                   // validation immédiate — même règle que pour un tir normal (clickCourtPosition())
+  }
+  R();
+}
+
+function closePenPanel(){
+  if(S.readOnly) return;
+  S.actionPanel=null;
+  S.selectedAction=null;
+  S.penMode=false;
   R();
 }
 
@@ -887,6 +920,16 @@ function validateAndClose(){
   if(S.readOnly) return;
   const ap=S.actionPanel; if(!ap || !ap.shooterId) return;
   const act = ACTIONS[ap.type];
+  if(!act) return;
+  if(act.isPen && ap._editIdx==null){
+    const shooterStillValid = S[ap.team].players.some(p=>p.id===ap.shooterId && p.selected);
+    if(!shooterStillValid){
+      ap.shooterId=null; ap.type=null; ap.mapX=null; ap.mapY=null; ap.goalZone=null;
+      showToast("Le tireur désigné n'est plus disponible, resélectionne un joueur.", true);
+      R();
+      return;
+    }
+  }
   const oppTeam = ap.team==="home"?"away":"home";
   const gk = S[oppTeam].gkId;
   const player = S[ap.team].players.find(p=>p.id===ap.shooterId);
@@ -924,11 +967,11 @@ function validateAndClose(){
   if(!ap._editIdx && (act.isGoal||act.isSave||act.isOff||ap.type==="TURNOVER")){
     S.possession = ap.team==="home"?"away":"home";
   }
+  if(act.isPen && (act.isGoal||act.isSave||act.isOff)) S.penMode=false;
   S.actionPanel = null;
   S.selectedAction = null;
   S.pendingPlayer = null;
   S.penResultSelect = null;
-  // penMode is cleared explicitly by caller (clickActionPlayer) or undoLast
   checkGkConsecutiveAlert();
   checkTimeoutAdvisor();
 }
@@ -996,7 +1039,11 @@ function renderMatchSimple(){
 function undoLast(){
   if(S.readOnly) return;
   if(S.events.length===0) return;
-  if(S.events[0]?.type==='PEN_OBT') S.penMode=false;
+  if(S.events[0]?.type==='PEN_OBT'){
+    S.penMode=false;
+    S.actionPanel=null;
+    S.selectedAction=null;
+  }
   const removed=S.events.shift();
   dequeueEventSync(removed);
   S.pdSelect=false;
@@ -1410,6 +1457,45 @@ function newMatch(){
   R();
 }
 
+// Charge un match archivé comme match courant — utilisée par le bouton "📂 Charger" de
+// l'Historique (data-load-match) ET le raccourci PDF de Bilan (data-load-match-pdf, STORY-36).
+// opts.gotoView/gotoStatsTab permettent au raccourci PDF d'atterrir directement sur Stats→PDF ;
+// opts.confirmContext="pdf-bilan" quantifie le texte de confirmation pour ce point d'entrée précis.
+function loadMatchAsCurrent(id, opts={}){
+  if(S.readOnly) return false;
+  const m=S.matchHistory.find(x=>x.id===id); if(!m) return false;
+
+  let msg = `Charger ${m.home?.name} vs ${m.away?.name} (${m.journee||""}) ?\nLe match en cours sera remplacé.`;
+  if(opts.confirmContext==="pdf-bilan" && S.events.length>0){
+    msg = `⚠️ Vous avez un match EN COURS avec ${S.events.length} événement(s) non sauvegardé(s).\nLe charger effacera ${S.events.length} action(s) déjà saisies.\nCharger ${m.home?.name} vs ${m.away?.name} (${m.journee||""}) à la place ?`;
+  }
+  if(!safeConfirm(msg)) return false;
+
+  // ─── P0 — couper tout lien avec le match en cours AVANT de charger le match archivé,
+  // symétrique à newMatch() : sinon la souscription Realtime encore active écrirait les
+  // événements/snapshots du match archivé vers le matchId Supabase du vrai match en cours.
+  S.currentMatchId = null;
+  unsubscribeMatchEvents();
+
+  S.home={...m.home,players:(m.home?.players||[]).map(p=>({...p}))};
+  S.away={...m.away,players:(m.away?.players||[]).map(p=>({...p}))};
+  S.events=(m.events||[]).map(e=>({...e}));
+  S.time=m.time||0; S.period=m.period||1;
+  S.season=m.season||S.season; S.journee=m.journee||S.journee;
+  S.coachNotes=m.coachNotes||"";
+  S.selectedAction=null; S.shotOverlay=null; S.playerSelect=null;
+  S.penResultSelect=null; S.pdSelect=false; S.actionPanel=null; S.penMode=false;
+  S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
+  S.tmUsed={mt1:0,mt2:0};
+  S.events.filter(e=>e.type==="TM"&&e.team==="home").forEach(e=>{
+    if((e.period||1)===1) S.tmUsed.mt1++; else S.tmUsed.mt2++;
+  });
+  S.view = opts.gotoView || "match";
+  if(opts.gotoStatsTab) S.statsTab = opts.gotoStatsTab;
+  saveTeams(); R();
+  return true;
+}
+
 // ═══════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════
@@ -1611,6 +1697,7 @@ function renderTeamSetup(side){
 // ─── MATCH ───
 function renderMatchPanel(){
   const ap=S.actionPanel;
+  if(S.penMode && ap){ return renderPenaltyPanel(ap); }
   const team=ap?ap.team:S.possession;
   const isHome=team==="home";
   const accent=isHome?"var(--fenix-sky)":"var(--red)";
@@ -1618,9 +1705,6 @@ function renderMatchPanel(){
   const positioned=courtPlayerPositions(roster);
   const act=ap?ACTIONS[ap.type]:null;
   const shooter=ap&&ap.shooterId?S[team].players.find(p=>p.id===ap.shooterId):null;
-
-  const GOAL_ZONES=["HG","HC","HD","MG","MC","MD","BG","BC","BD"];
-  const GZ_LABELS={HG:"↖",HC:"↑",HD:"↗",MG:"←",MC:"●",MD:"→",BG:"↙",BC:"↓",BD:"↘"};
 
   const shotAction=act&&(act.isGoal||act.isSave||act.isOff);
   // Shot position required for both teams
@@ -1639,22 +1723,9 @@ function renderMatchPanel(){
 
   // SHOT MODE: étape 1 = terrain, étape 2 = overlay zone de but (terrain bloqué)
   if(shotMode){
-    const showGZ=S.trackGK&&ap.mapX!=null&&!act.isOff;
     return `<div style="margin-top:2px;">
       ${statusHtml}
-      <div class="court-pick" style="cursor:${showGZ?"default":"crosshair"};">
-        <svg class="court-svg-bg" viewBox="0 0 350 208" preserveAspectRatio="none">${courtSvgMarkup()}</svg>
-        ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:20px;color:#FFF;pointer-events:none;text-shadow:0 0 6px #000;z-index:6;">✕</div>`:""}
-        ${showGZ?`
-          <div style="position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px;background:rgba(9,20,32,.92);backdrop-filter:blur(4px);border-radius:6px;">
-            <div style="font-size:11px;color:var(--t2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Zone d'impact dans le but</div>
-            <div class="goal-zone-grid gz-big" style="width:92%;">
-              ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
-            </div>
-            <button onclick="S.actionPanel.mapX=null;S.actionPanel.mapY=null;R();" style="font-size:10px;padding:4px 14px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--t3);font-family:inherit;cursor:pointer;">↩ Modifier la position</button>
-          </div>
-        `:`<div style="position:absolute;inset:0;z-index:3;" data-court-position></div>`}
-      </div>
+      ${renderShotCourt(ap, act)}
     </div>`;
   }
 
@@ -1676,8 +1747,70 @@ function renderMatchPanel(){
   </div>`;
 }
 
+function renderShotCourt(ap, act){
+  const GOAL_ZONES=["HG","HC","HD","MG","MC","MD","BG","BC","BD"];
+  const GZ_LABELS={HG:"↖",HC:"↑",HD:"↗",MG:"←",MC:"●",MD:"→",BG:"↙",BC:"↓",BD:"↘"};
+  const showGZ=S.trackGK&&ap.mapX!=null&&!act.isOff;
+  return `<div class="court-pick" style="cursor:${showGZ?"default":"crosshair"};">
+    <svg class="court-svg-bg" viewBox="0 0 350 208" preserveAspectRatio="none">${courtSvgMarkup()}</svg>
+    ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:20px;color:#FFF;pointer-events:none;text-shadow:0 0 6px #000;z-index:6;">✕</div>`:""}
+    ${showGZ?`
+      <div style="position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px;background:rgba(9,20,32,.92);backdrop-filter:blur(4px);border-radius:6px;">
+        <div style="font-size:11px;color:var(--t2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Zone d'impact dans le but</div>
+        <div class="goal-zone-grid gz-big" style="width:92%;">
+          ${GOAL_ZONES.map(z=>`<div class="gz-cell ${ap.goalZone===z?"active":""}" data-gz="${z}">${GZ_LABELS[z]}</div>`).join("")}
+        </div>
+        ${!act.isPen?`<button onclick="S.actionPanel.mapX=null;S.actionPanel.mapY=null;R();" style="font-size:10px;padding:4px 14px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--t3);font-family:inherit;cursor:pointer;">↩ Modifier la position</button>`:""}
+      </div>
+    `:`<div style="position:absolute;inset:0;z-index:3;" data-court-position></div>`}
+  </div>`;
+}
+
+function renderPenaltyPanel(ap){
+  const act = ap.type ? ACTIONS[ap.type] : null;
+  const shooter = ap.shooterId ? S[ap.team].players.find(p=>p.id===ap.shooterId) : null;
+  const headHtml = `<div class="ap-pen-panel">
+    <button class="btn btn-sm ap-pen-close" data-pen-close>✕ Fermer</button>
+    <div class="ap-pen-head">
+      <span class="ap-mode-badge-pen">🎯 MODE PENALTY</span>
+      ${shooter?`<span class="ap-badge ap-badge-pen"><span class="dot"></span>#${shooter.number||""} ${shooter.name}</span>`:""}
+    </div>
+    ${!act ? renderPenOutcomeButtons() : ""}
+  </div>`;
+  const bodyHtml = !act ? renderPenRoster(ap) : renderShotCourt(ap, act);
+  return `<div style="margin-top:2px;">${headHtml}${bodyHtml}</div>`;
+}
+
+function renderPenOutcomeButtons(){
+  return `<div class="ap-pen-actions">
+    <button class="ap-pen-btn" style="--pen-rgb:var(--pen-goal-rgb)" data-pen-outcome="GOAL"><span class="ah-icon">⚽</span><span class="ah-label">BUT</span></button>
+    <button class="ap-pen-btn" style="--pen-rgb:var(--pen-save-rgb)" data-pen-outcome="SAVE"><span class="ah-icon">🧤</span><span class="ah-label">ARRÊT</span></button>
+    <button class="ap-pen-btn" style="--pen-rgb:var(--pen-off-rgb)" data-pen-outcome="OFF"><span class="ah-icon">↗</span><span class="ah-label">HORS CADRE</span></button>
+  </div>`;
+}
+
+function renderPenRoster(ap){
+  const roster=S[ap.team].players.filter(p=>p.selected);
+  const positioned=courtPlayerPositions(roster);
+  return `<div class="court-pick">
+    <svg class="court-svg-bg" viewBox="0 0 350 208" preserveAspectRatio="none">${courtSvgMarkup()}</svg>
+    ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>{
+      const isPenShooter=p.id===ap.shooterId;
+      return `<div class="cp-player ${isPenShooter?"pen-shooter":"pen-other"}" data-ap-player="${p.id}"
+           style="left:${p.cx}%;top:${p.cy}%;">
+        <div class="cp-num ${p.number?"":"cp-num-missing"}">${displayNumber(p)}</div>
+        <div class="cp-name">${p.name}</div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
 function deleteEvent(idx){
   if(S.readOnly) return;
+  if(S.penMode){
+    safeAlert("Terminez ou fermez le pénalty en cours avant de modifier un autre événement.");
+    return;
+  }
   const ev=S.events[idx]; if(!ev) return;
   const a=ACTIONS[ev.type];
   const pLabel=ev.playerNumber?`#${ev.playerNumber} ${ev.playerName||""}`:(ev.playerName||"");
@@ -1689,6 +1822,10 @@ function deleteEvent(idx){
 
 function editEvent(idx){
   if(S.readOnly) return;
+  if(S.penMode){
+    safeAlert("Terminez ou fermez le pénalty en cours avant de modifier un autre événement.");
+    return;
+  }
   const ev=S.events[idx]; if(!ev) return;
   S.feedOpen=false;
   S._lastTeam=ev.team;
@@ -1738,7 +1875,7 @@ function renderMatch(){
         <button class="mlt-btn-sanc sb-badge" data-badge="${side}|TWO_MIN">⏱ ${h2}</button>
         <button class="mlt-btn-sanc mlt-btn-red sb-badge" data-badge="${side}|RED">🟥 ${r}</button>
       </div>
-      <button class="mlt-poss-btn ${active?"mlt-poss-active mlt-poss-"+side:""}" data-poss="${side}">
+      <button class="mlt-poss-btn ${active?"mlt-poss-active mlt-poss-"+side:""} ${S.penMode?"is-pen-locked":""}" data-poss="${side}">
         <span class="poss-icon">${active?"◉":"○"}</span>
         <span class="poss-label">${active?"POSSESSION":""}</span>
       </button>
@@ -1823,7 +1960,7 @@ function renderMatch(){
     <div class="ml-right">
       ${S.mode==="simple" ? renderMatchSimple() : `
       <!-- Barre d'actions horizontale -->
-      <div class="ml-actions">
+      <div class="ml-actions ${S.penMode?"is-pen-locked":""}">
         ${actBtn("GOAL","xl")}
         ${actBtn("SAVE","xl")}
         ${actBtn("OFF")}
@@ -1833,11 +1970,8 @@ function renderMatch(){
         ${actBtn("FREEKICK","sm")}
       </div>
 
-      <!-- Status: penMode + dernier event -->
-      ${S.penMode||lastEvHtml?`<div class="ml-status">
-        ${S.penMode?`<span style="background:rgba(240,199,94,.12);border:1.5px solid var(--yellow);border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;color:var(--yellow);letter-spacing:.06em;">🎯 MODE PENALTY</span>`:""}
-        ${lastEvHtml}
-      </div>`:""}
+      <!-- Status: dernier event -->
+      ${lastEvHtml?`<div class="ml-status">${lastEvHtml}</div>`:""}
 
       <!-- Terrain -->
       <div class="ml-court">
@@ -3035,7 +3169,7 @@ function renderGkSheet(side){
   // Court column: heatmap + shot map, filtered by GK selection AND shot-type filter
   const sf=S.gkShotFilter;
   const gkIds = filter==="all" ? gbs.map(g=>g.id) : [filter];
-  const allShots = S.events.filter(e=>e.team===oppSide && (ACTIONS[e.type].needsMap) && e.x!=null && gkIds.includes(e.gkId));
+  const allShots = S.events.filter(e=>e.team===oppSide && (ACTIONS[e.type].needsMap) && !ACTIONS[e.type].isPen && e.x!=null && gkIds.includes(e.gkId));
   const shots = allShots.filter(s=>{
     if(ACTIONS[s.type].isGoal) return sf.goals;
     if(ACTIONS[s.type].isSave) return sf.saves;
@@ -3132,28 +3266,185 @@ function matchStats(m){
   return stats;
 }
 
-function renderBilanMatch(){
-  const matches=S.matchHistory;
-  if(matches.length===0) return `<div class="card"><div class="empty" style="padding:20px;text-align:center;color:var(--t3);">Aucun match sauvegardé</div></div>`;
+// Miroir de periodScore(side,per) mais pour un match archivé m — jamais S.events
+function periodScoreOfMatch(m, side, per){
+  return (m.events||[]).filter(e=>e.team===side && e.period===per && ACTIONS[e.type]?.isGoal).length;
+}
 
-  const m=S.bilanMatch;
-  // Match selector
-  let html=`<div class="card" style="max-width:700px;margin:0 auto;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+// Jumeau scoped-match de autoAnalysis() (STORY-35) — calcule exclusivement à partir de m,
+// jamais S. Réutilise matchStats(m) pour goals/total/eff/turnovers déjà résolus.
+function matchAnalysis(m){
+  const insights=[];
+  const evts=m.events||[];
+  const ms=matchStats(m);
+  const hScore=ms.home.goals, aScore=ms.away.goals;
+  const hTotal=ms.home.total, aTotal=ms.away.total;
+  const hEff=ms.home.eff, aEff=ms.away.eff;
+  const hPB=ms.home.turnovers;
+
+  // Result
+  if(hScore>aScore) insights.push({icon:"✅",text:`Victoire ${hScore}-${aScore} (+${hScore-aScore})`});
+  else if(hScore<aScore) insights.push({icon:"❌",text:`Défaite ${hScore}-${aScore} (-${aScore-hScore})`});
+  else insights.push({icon:"🤝",text:`Match nul ${hScore}-${aScore}`});
+
+  // Efficiency comparison
+  insights.push({icon:"📊",text:`Efficacité FENIX ${hEff}% vs Adversaire ${aEff}%`});
+  if(hEff<50) insights.push({icon:"⚠️",text:`Efficacité faible (${hEff}%) - travail du tir nécessaire`});
+
+  // PB analysis
+  if(hPB>8) insights.push({icon:"🔴",text:`${hPB} pertes de balle - trop élevé`});
+  else if(hPB<=5) insights.push({icon:"🟢",text:`${hPB} pertes de balle - bonne gestion`});
+
+  // Max consecutive goals conceded
+  let maxRun=0, curRun=0;
+  [...evts].reverse().forEach(e=>{
+    if(e.team==="away" && ACTIONS[e.type]?.isGoal){ curRun++; maxRun=Math.max(maxRun,curRun); }
+    else if(e.team==="away" && ACTIONS[e.type]?.isSave){ curRun=0; }
+  });
+  if(maxRun>=4) insights.push({icon:"🚨",text:`Série max de ${maxRun} buts encaissés d'affilée`});
+  else if(maxRun<=2) insights.push({icon:"🟢",text:`Défense solide - max ${maxRun} buts consécutifs`});
+
+  // Half-time analysis
+  const hMT1=periodScoreOfMatch(m,"home",1), hMT2=periodScoreOfMatch(m,"home",2);
+  if(hMT2>hMT1+2) insights.push({icon:"📈",text:`Forte 2ème MT (+${hMT2-hMT1} buts vs MT1)`});
+  if(hMT2<hMT1-2) insights.push({icon:"📉",text:`Baisse en 2ème MT (${hMT2} vs ${hMT1} en MT1)`});
+
+  // PD analysis
+  const hPD=evts.filter(e=>e.team==="home"&&e.assistId).length;
+  if(hPD>=10) insights.push({icon:"🟢",text:`${hPD} passes décisives - bon collectif`});
+  else if(hPD<=5) insights.push({icon:"⚠️",text:`Seulement ${hPD} PD - jeu trop individuel ?`});
+
+  // Efficiency by 10-min blocks
+  const blocks=[{l:"0-10'",p:1,min:0,max:10},{l:"10-20'",p:1,min:10,max:20},{l:"20-30'",p:1,min:20,max:30},
+    {l:"30-40'",p:2,min:0,max:10},{l:"40-50'",p:2,min:10,max:20},{l:"50-60'",p:2,min:20,max:30}];
+  let worstBlock=null, bestBlock=null;
+  blocks.forEach(b=>{
+    const bEvts=evts.filter(e=>e.team==="home"&&(e.period||1)===b.p).filter(e=>{
+      const mn=parseInt((e.time||"0:00").split(":")[0])||0;
+      return mn>=b.min&&mn<b.max&&(ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff);
+    });
+    const goals=bEvts.filter(e=>ACTIONS[e.type]?.isGoal).length;
+    const total=bEvts.length;
+    const eff=total>0?Math.round(goals/total*100):-1;
+    if(total>=2){
+      if(!worstBlock||eff<worstBlock.eff) worstBlock={l:b.l,eff,goals,total};
+      if(!bestBlock||eff>bestBlock.eff) bestBlock={l:b.l,eff,goals,total};
+    }
+  });
+  if(bestBlock) insights.push({icon:"⏱",text:`Meilleure période : ${bestBlock.l} (${bestBlock.eff}%, ${bestBlock.goals}/${bestBlock.total})`});
+  if(worstBlock&&worstBlock.eff<50) insights.push({icon:"⏱",text:`Période difficile : ${worstBlock.l} (${worstBlock.eff}%, ${worstBlock.goals}/${worstBlock.total})`});
+
+  // Top scorer
+  const playerStats={};
+  evts.filter(e=>e.team==="home"&&e.playerId).forEach(e=>{
+    if(!playerStats[e.playerId]) playerStats[e.playerId]={name:e.playerName,num:e.playerNumber,goals:0,pd:0,pb:0,tirs:0};
+    const ps=playerStats[e.playerId];
+    if(ACTIONS[e.type]?.isGoal) { ps.goals++; ps.tirs++; }
+    if(ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff) ps.tirs++;
+    if(e.type==="TURNOVER") ps.pb++;
+  });
+  evts.filter(e=>e.team==="home"&&e.assistId).forEach(e=>{
+    if(playerStats[e.assistId]) playerStats[e.assistId].pd++;
+  });
+  const sorted=Object.values(playerStats).sort((a,b)=>(b.goals+b.pd)-(a.goals+a.pd));
+  if(sorted.length>0){
+    const top=sorted[0];
+    insights.push({icon:"⭐",text:`Top : #${top.num} ${top.name} (${top.goals} buts, ${top.pd} PD)`});
+  }
+  if(sorted.length>1){
+    const flops=Object.values(playerStats).filter(p=>p.tirs>0).sort((a,b)=>{
+      const ae=a.tirs>0?a.goals/a.tirs:1; const be=b.tirs>0?b.goals/b.tirs:1;
+      return ae-be;
+    });
+    if(flops.length>0&&flops[0].tirs>=2){
+      const f=flops[0];
+      const eff=Math.round(f.goals/f.tirs*100);
+      insights.push({icon:"📉",text:`A surveiller : #${f.num} ${f.name} (${f.goals}/${f.tirs} tirs = ${eff}%, ${f.pb} PB)`});
+    }
+  }
+
+  return insights;
+}
+
+// Jumeau scoped-match de generateExportText() (STORY-35) — utilise m.coachNotes, jamais S.coachNotes
+function matchExportText(m){
+  const evts=m.events||[];
+  const ms=matchStats(m);
+  const hScore=ms.home.goals, aScore=ms.away.goals;
+  const insights=matchAnalysis(m);
+  let txt=`═══ FENIX STATS - EXPORT ANALYSE ═══\n`;
+  txt+=`${m.season||""} | ${m.journee||""} | ${new Date().toLocaleDateString("fr-FR")}\n`;
+  txt+=`${m.home?.name||"?"} ${hScore} - ${aScore} ${m.away?.name||"?"}\n`;
+  txt+=`MT1: ${periodScoreOfMatch(m,"home",1)}-${periodScoreOfMatch(m,"away",1)} | MT2: ${periodScoreOfMatch(m,"home",2)}-${periodScoreOfMatch(m,"away",2)}\n\n`;
+  txt+=`── ANALYSE AUTO ──\n`;
+  insights.forEach(i=>{ txt+=`${i.icon} ${i.text}\n`; });
+  txt+=`\n── STATS ──\n`;
+  txt+=`Poss: ${ms.home.poss} vs ${ms.away.poss}\n`;
+  txt+=`Eff: ${ms.home.eff}% vs ${ms.away.eff}%\n`;
+  txt+=`PB: ${ms.home.turnovers} vs ${ms.away.turnovers}\n`;
+  txt+=`PD: ${evts.filter(e=>e.team==="home"&&e.assistId).length} vs ${evts.filter(e=>e.team==="away"&&e.assistId).length}\n`;
+  txt+=`2min: ${ms.home.twoMin} vs ${ms.away.twoMin}\n`;
+  // Top joueurs
+  txt+=`\n── JOUEURS ──\n`;
+  const ps={};
+  evts.filter(e=>e.team==="home"&&e.playerId).forEach(e=>{
+    if(!ps[e.playerId]) ps[e.playerId]={name:e.playerName,num:e.playerNumber,goals:0,pd:0,tirs:0,pb:0};
+    const p=ps[e.playerId];
+    if(ACTIONS[e.type]?.isGoal){p.goals++;p.tirs++;}
+    if(ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff) p.tirs++;
+    if(e.type==="TURNOVER") p.pb++;
+  });
+  evts.filter(e=>e.team==="home"&&e.assistId).forEach(e=>{
+    if(ps[e.assistId]) ps[e.assistId].pd++;
+  });
+  Object.values(ps).sort((a,b)=>b.goals-a.goals).forEach(p=>{
+    const eff=p.tirs>0?Math.round(p.goals/p.tirs*100)+"%":"-";
+    txt+=`#${p.num} ${p.name}: ${p.goals}B ${p.pd}PD ${p.tirs}T ${eff} ${p.pb}PB\n`;
+  });
+  // Coach notes
+  if(m.coachNotes){
+    txt+=`\n── NOTES COACH ──\n${m.coachNotes}\n`;
+  }
+  txt+=`\n═══════════════════════════════\n`;
+  return txt;
+}
+
+// Écriture réelle des notes coach d'un match archivé (STORY-35) — toujours l'objet m complet,
+// jamais un objet reconstruit à la main (dbSaveMatch fait un put() IndexedDB qui remplace
+// l'enregistrement entier : un objet partiel effacerait silencieusement les autres champs).
+async function saveBilanNotes(){
+  if(S.readOnly) return;
+  const m = S.bilanMatch; if(!m) return;
+  m.coachNotes = S.bilanNotesDraft!==null ? S.bilanNotesDraft : (m.coachNotes||"");
+  try{
+    await dbSaveMatch(m);
+    showToast("💾 Notes sauvegardées !");
+    S.bilanNotesDraft = null;
+  }catch(e){ safeAlert("Erreur de sauvegarde: "+e.message); }
+}
+
+function renderBilanMatchSelector(){
+  const matches=S.matchHistory;
+  return `<div class="card" style="max-width:700px;margin:0 auto 10px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:12px;font-weight:600;color:var(--t2);">Match :</span>
-      <select id="bilan-match-sel" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;">
+      <select id="bilan-match-sel" class="bilan-match-select" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;">
         <option value="">— Sélectionne un match —</option>
         ${matches.map(mx=>{
           const lbl=`${mx.journee||"—"} · ${mx.home?.name||"?"} ${mx.scoreH??0}-${mx.scoreA??0} ${mx.away?.name||"?"} (${mx.date||""})`;
           return `<option value="${mx.id}" ${S.bilanMatchId===mx.id?"selected":""}>${lbl}</option>`;
         }).join("")}
       </select>
-    </div>`;
+    </div>
+  </div>`;
+}
 
-  if(!m){
-    html+=`<div class="empty" style="padding:20px;text-align:center;color:var(--t3);">↑ Sélectionne un match pour le revoir</div></div>`;
-    return html;
-  }
+function renderBilanArchivedBanner(m){
+  return `<div class="bilan-archived-banner">📁 MATCH ARCHIVÉ — ${m.home?.name||"?"} ${m.scoreH??0}-${m.scoreA??0} ${m.away?.name||"?"} (${m.journee||""})</div>`;
+}
+
+function renderBilanMatch(m){
+  let html=`<div class="card" style="max-width:700px;margin:0 auto;">`;
 
   const ms=matchStats(m);
   const evts=m.events||[];
@@ -3288,6 +3579,48 @@ function renderBilanMatch(){
 
   html+=`</div>`;
   return html;
+}
+
+function renderBilanAnalyse(m){
+  const insights=matchAnalysis(m);
+  const savedNote=m.coachNotes||"";
+  const draft=S.bilanNotesDraft!==null?S.bilanNotesDraft:savedNote;
+  const dirty=S.bilanNotesDraft!==null && S.bilanNotesDraft!==savedNote;
+  return `
+    <div class="card" style="max-width:600px;margin:10px auto;">
+      <div class="card-t">🧠 Analyse automatique</div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding:4px 0;">
+        ${insights.map(i=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;background:var(--bg);border-radius:6px;">
+          <span style="font-size:16px;flex-shrink:0;">${i.icon}</span>
+          <span style="font-size:12px;color:var(--t1);line-height:1.4;">${i.text}</span>
+        </div>`).join("")}
+      </div>
+    </div>
+    <div class="card" style="max-width:600px;margin:10px auto;">
+      <div class="card-t" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>📝 Notes du coach</span>
+        <span class="bilan-dirty-chip" style="display:${dirty?"":"none"};"><span class="dot"></span><span>Non sauvegardé</span></span>
+      </div>
+      <textarea id="bilan-coach-notes" class="${S.readOnly?"is-disabled":""}" placeholder="Tes observations sur ce match : points forts, faiblesses, ajustements à faire..."
+        style="width:100%;min-height:120px;background:var(--bg);border:1px solid ${dirty?"rgba(240,199,94,.45)":"var(--border)"};border-radius:8px;
+        color:var(--t1);font-size:13px;padding:10px;resize:vertical;font-family:inherit;">${draft}</textarea>
+      <div style="margin-top:8px;text-align:center;">
+        <button id="save-bilan-coach-notes" class="btn btn-g ${S.readOnly?"is-disabled":""}" style="padding:8px 20px;font-size:13px;">💾 Sauvegarder notes</button>
+      </div>
+    </div>
+    <div class="card" style="max-width:600px;margin:10px auto;">
+      <div class="card-t">📤 Exporter pour analyse</div>
+      <p style="font-size:11px;color:var(--t2);margin:4px 0 8px;">Copie ce texte et envoie-le dans la conversation Claude pour alimenter l'analyse collaborative match après match.</p>
+      <button id="export-bilan-analyse" class="btn btn-g" style="padding:10px 20px;font-size:13px;width:100%;">📋 Copier le résumé d'analyse</button>
+    </div>`;
+}
+
+function renderBilanPdf(m){
+  return `<div class="card bilan-pdf-card" style="max-width:600px;margin:10px auto;text-align:center;">
+    <div class="card-t">📄 Export PDF de ce match</div>
+    <div class="bilan-pdf-warning-note">⚠️ Cette action remplace temporairement le match en cours par celui-ci, le temps de générer le PDF depuis Stats → PDF. Si un match est activement en cours de saisie, ses données non sauvegardées seront perdues.</div>
+    <button class="btn-pdf-warn" data-load-match-pdf="${m.id}">⚠️ Charger ce match &amp; générer son PDF</button>
+  </div>`;
 }
 
 function renderBilanSaison(){
@@ -3524,15 +3857,32 @@ function renderBilanSaison(){
 }
 
 function renderBilan(){
-  return `
-    <div class="stats-tabs">
-      ${[{id:"match",l:"🔍 Match"},{id:"saison",l:"🏆 Saison"}].map(t=>
-        `<button class="st-tab ${S.bilanTab===t.id?"on":""}" data-btab="${t.id}">${t.l}</button>`
-      ).join("")}
-    </div>
-    ${S.bilanTab==="match"?renderBilanMatch():""}
-    ${S.bilanTab==="saison"?renderBilanSaison():""}
-  `;
+  const tabs=[{id:"match",l:"🔍 Match"},{id:"analyse",l:"🧠 Analyse"},{id:"pdf",l:"📄 PDF"},{id:"saison",l:"🏆 Saison"}];
+  let html = `<div class="stats-tabs">${tabs.map(t=>
+    `<button class="st-tab ${S.bilanTab===t.id?"on":""}" data-btab="${t.id}">${t.l}</button>`
+  ).join("")}</div>`;
+
+  if(S.bilanTab==="saison") return html + renderBilanSaison();
+
+  if(S.matchHistory.length===0){
+    return html + `<div class="card"><div class="empty" style="padding:20px;text-align:center;color:var(--t3);">Aucun match sauvegardé</div></div>`;
+  }
+
+  html += renderBilanMatchSelector();
+
+  // Re-dérivé à chaque rendu (pas seulement lu tel quel) : S.matchHistory est remplacé par de
+  // nouvelles instances à chaque dbGetAll() (nav vers Matchs/Stats puis retour) — sans cette
+  // ligne, S.bilanMatch resterait une référence obsolète absente par identité du nouveau tableau.
+  const m = S.bilanMatch = S.matchHistory.find(x=>x.id===S.bilanMatchId)||null;
+  if(!m){
+    return html + `<div class="card"><div class="empty" style="padding:20px;text-align:center;color:var(--t3);">↑ Sélectionne un match pour le revoir</div></div>`;
+  }
+
+  html += renderBilanArchivedBanner(m);
+  if(S.bilanTab==="match")   html += renderBilanMatch(m);
+  if(S.bilanTab==="analyse") html += renderBilanAnalyse(m);
+  if(S.bilanTab==="pdf")     html += renderBilanPdf(m);
+  return html;
 }
 
 // ─── HISTORY ───
@@ -3664,11 +4014,61 @@ function bind(){
   // Bilan match selector
   const bms=document.getElementById("bilan-match-sel");
   if(bms) bms.onchange=()=>{
-    const id=parseInt(bms.value);
-    S.bilanMatchId=id||null;
-    S.bilanMatch=S.matchHistory.find(m=>m.id===id)||null;
+    const newId=parseInt(bms.value)||null;
+    const savedNote=S.bilanMatch?.coachNotes||"";
+    if(S.bilanNotesDraft!==null && S.bilanNotesDraft!==savedNote){
+      if(!safeConfirm("Notes non sauvegardées. Changer de match quand même ?\nVos modifications seront perdues.")){
+        bms.value=String(S.bilanMatchId||""); return;
+      }
+    }
+    S.bilanMatchId=newId;
+    S.bilanMatch=S.matchHistory.find(m=>m.id===newId)||null;
+    S.bilanNotesDraft=null;
     R();
   };
+  // Bilan — notes coach (onglet Analyse) : jamais de R() dans oninput, casserait focus/curseur
+  const bcn=document.getElementById("bilan-coach-notes");
+  if(bcn) bcn.oninput=()=>{
+    if(S.readOnly) return;
+    S.bilanNotesDraft=bcn.value;
+    const dirty = S.bilanNotesDraft !== (S.bilanMatch?.coachNotes||"");
+    bcn.style.borderColor = dirty ? "rgba(240,199,94,.45)" : "var(--border)";
+    const chip=document.querySelector(".bilan-dirty-chip");
+    if(chip){
+      chip.classList.toggle("saved", false);
+      chip.style.display = dirty ? "" : "none";
+      chip.querySelector("span:last-child").textContent="Non sauvegardé";
+    }
+  };
+  const sbcn=document.getElementById("save-bilan-coach-notes");
+  if(sbcn) sbcn.onclick=async()=>{
+    if(S.readOnly) return;
+    await saveBilanNotes();
+    const bcn2=document.getElementById("bilan-coach-notes");
+    if(bcn2) bcn2.style.borderColor="var(--border)";
+    const chip=document.querySelector(".bilan-dirty-chip");
+    if(chip){ chip.classList.add("saved"); chip.style.display=""; chip.querySelector("span:last-child").textContent="✓ Sauvegardé"; }
+    // Ne masque que si le chip est toujours en état "saved" — si l'utilisateur a retapé entre
+    // temps, oninput a déjà retiré cette classe, et le chip doit rester visible ("Non sauvegardé").
+    setTimeout(()=>{ const c=document.querySelector(".bilan-dirty-chip"); if(c && c.classList.contains("saved")) c.style.display="none"; }, 1400);
+  };
+  const eba=document.getElementById("export-bilan-analyse");
+  if(eba) eba.onclick=()=>{
+    const m=S.bilanMatch; if(!m) return;
+    const txt=matchExportText(m);
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(()=>showToast("📋 Résumé copié ! Colle-le dans Claude.")).catch(()=>fallbackCopyBilan(txt));
+    } else { fallbackCopyBilan(txt); }
+  };
+  function fallbackCopyBilan(txt){
+    const ta=document.createElement("textarea");
+    ta.value=txt; ta.style.cssText="position:fixed;left:-9999px;";
+    document.body.appendChild(ta); ta.select();
+    try{document.execCommand("copy");showToast("📋 Résumé copié !");}catch(e){
+      showExportModal(txt);
+    }
+    document.body.removeChild(ta);
+  }
   // GK filter select (STORY-30)
   document.querySelectorAll("[data-gk-filter-select]").forEach(el=>{
     el.onchange=()=>{
@@ -3813,7 +4213,7 @@ function bind(){
   // Actions
   document.querySelectorAll("[data-act]").forEach(el=>{ el.onclick=()=>selectAction(el.dataset.act); });
   // Possession toggle
-  document.querySelectorAll("[data-poss]").forEach(el=>{ el.onclick=()=>{ S.possession=el.dataset.poss; if(!S.actionPanel) R(); else { S.actionPanel.team=S.possession; R(); } }; });
+  document.querySelectorAll("[data-poss]").forEach(el=>{ el.onclick=()=>{ if(S.penMode) return; S.possession=el.dataset.poss; if(!S.actionPanel) R(); else { S.actionPanel.team=S.possession; R(); } }; });
   // Court position tap (for shot position mode)
   const courtPos=document.querySelector("[data-court-position]");
   if(courtPos){ courtPos.onclick=(e)=>{ const rect=courtPos.getBoundingClientRect(); const x=Math.round((e.clientX-rect.left)/rect.width*100); const y=Math.round((e.clientY-rect.top)/rect.height*100); clickCourtPosition(x,y); }; }
@@ -3825,6 +4225,8 @@ function bind(){
 
   // Action panel bindings
   document.querySelectorAll("[data-ap-player]").forEach(el=>{ el.onclick=()=>clickActionPlayer(el.dataset.apPlayer); });
+  document.querySelectorAll("[data-pen-outcome]").forEach(el=>{ el.onclick=()=>{ choosePenOutcome(el.dataset.penOutcome); }; });
+  document.querySelectorAll("[data-pen-close]").forEach(el=>{ el.onclick=closePenPanel; });
   document.querySelectorAll("[data-gz]").forEach(el=>{ el.onclick=()=>clickGoalZone(el.dataset.gz); });
   const apValidate=document.getElementById("ap-validate-btn");
   if(apValidate) apValidate.onclick=validateActionPanel;
@@ -3899,28 +4301,10 @@ function bind(){
 
   // History: load/delete
   document.querySelectorAll("[data-load-match]").forEach(el=>{
-    el.onclick=()=>{
-      if(S.readOnly) return;
-      const id=parseInt(el.dataset.loadMatch);
-      const m=S.matchHistory.find(x=>x.id===id); if(!m) return;
-      if(!safeConfirm(`Charger ${m.home?.name} vs ${m.away?.name} (${m.journee||""}) ?\nLe match en cours sera remplacé.`)) return;
-      S.home={...m.home,players:(m.home?.players||[]).map(p=>({...p}))};
-      S.away={...m.away,players:(m.away?.players||[]).map(p=>({...p}))};
-      S.events=(m.events||[]).map(e=>({...e}));
-      S.time=m.time||0; S.period=m.period||1;
-      S.season=m.season||S.season; S.journee=m.journee||S.journee;
-      S.coachNotes=m.coachNotes||"";
-      S.selectedAction=null; S.shotOverlay=null; S.playerSelect=null;
-      S.penResultSelect=null; S.pdSelect=false; S.actionPanel=null; S.penMode=false;
-      S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
-      // Recalculate TM usage from events
-      S.tmUsed={mt1:0,mt2:0};
-      S.events.filter(e=>e.type==="TM"&&e.team==="home").forEach(e=>{
-        if((e.period||1)===1) S.tmUsed.mt1++; else S.tmUsed.mt2++;
-      });
-      S.view="match";
-      saveTeams(); R();
-    };
+    el.onclick=()=>{ loadMatchAsCurrent(parseInt(el.dataset.loadMatch)); };
+  });
+  document.querySelectorAll("[data-load-match-pdf]").forEach(el=>{
+    el.onclick=()=>{ loadMatchAsCurrent(parseInt(el.dataset.loadMatchPdf), {gotoView:"stats", gotoStatsTab:"pdf", confirmContext:"pdf-bilan"}); };
   });
   document.querySelectorAll("[data-del-match]").forEach(el=>{
     el.onclick=async()=>{
