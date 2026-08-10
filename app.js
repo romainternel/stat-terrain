@@ -4428,27 +4428,54 @@ function generatePDF(){
   function wh(){doc.setTextColor(232,232,232);}
   function t2(){doc.setTextColor(160,168,184);}
   function t3(){doc.setTextColor(107,114,128);}
+  // Reproduit la géométrie officielle handball (2 quarts de cercle centrés sur
+  // chaque poteau + segment droit entre les deux) dans le référentiel viewBox
+  // 350x208 utilisé par courtSvgMarkup() côté appli — même terrain, même échelle.
+  function drawHandballZone(cx,cy,cw,ch,R,dashed,rgb){
+    const sx=cw/350, sy=ch/208;
+    const postL=148.75, postR=201.25;
+    const toPdf=(X,Y)=>[cx+X*sx, cy+Y*sy];
+    doc.setDrawColor(...rgb);
+    doc.setLineWidth(dashed?0.3:0.45);
+    if(dashed) doc.setLineDashPattern([1.2,1],0);
+    const steps=36;
+    [-1,1].forEach(side=>{
+      const post = side<0 ? postL : postR;
+      let prev=null;
+      for(let i=0;i<=steps;i++){
+        const th=(i/steps)*(Math.PI/2);
+        const X = post + side*R*Math.cos(th), Y = R*Math.sin(th);
+        if(X<0 || X>350){ prev=null; continue; }
+        const p=toPdf(X,Y);
+        if(prev) doc.line(prev[0],prev[1],p[0],p[1]);
+        prev=p;
+      }
+    });
+    const a=toPdf(postL,R), b=toPdf(postR,R);
+    doc.line(a[0],a[1],b[0],b[1]);
+    if(dashed) doc.setLineDashPattern([],0);
+  }
   function drawCourt(cx,cy,cw,ch,shots,label){
-    doc.setFillColor(20,50,35);doc.roundedRect(cx,cy,cw,ch,2,2,"F");
-    doc.setDrawColor(255,255,255);doc.setLineWidth(0.3);
-    doc.rect(cx,cy,cw,ch);
-    // 6m arc
-    doc.setDrawColor(80,80,80);doc.setLineWidth(0.4);
-    const mid=cx+cw/2;
-    for(let a=0;a<=180;a+=5){
-      const r1=12,r2=18;
-      const rad1=a*Math.PI/180,rad2=(a+5)*Math.PI/180;
-      doc.line(mid+r1*Math.cos(rad1),cy+ch-r1*Math.sin(rad1),mid+r1*Math.cos(rad2),cy+ch-r1*Math.sin(rad2));
-      doc.setLineWidth(0.2);doc.setDrawColor(60,60,60);
-      doc.line(mid+r2*Math.cos(rad1),cy+ch-r2*Math.sin(rad1),mid+r2*Math.cos(rad2),cy+ch-r2*Math.sin(rad2));
-      doc.setLineWidth(0.4);doc.setDrawColor(80,80,80);
-    }
-    // Goal line
-    doc.setDrawColor(200,200,200);doc.setLineWidth(0.6);
-    doc.line(mid-8,cy+ch,mid+8,cy+ch);
-    // Shots
+    // Fond et lignes calqués sur --court-fill/--court-line/--court-goal de l'appli
+    doc.setFillColor(15,25,35);doc.roundedRect(cx,cy,cw,ch,2,2,"F");
+    doc.setDrawColor(74,103,122);doc.setLineWidth(0.3);
+    doc.line(cx,cy,cx,cy+ch);
+    doc.line(cx+cw,cy,cx+cw,cy+ch);
+    doc.line(cx,cy+ch,cx+cw,cy+ch);
+    // 9m (pointillés) puis 6m (plein) — mêmes rayons que le terrain de l'appli
+    drawHandballZone(cx,cy,cw,ch,157.5,true,[70,95,115]);
+    drawHandballZone(cx,cy,cw,ch,105,false,[123,167,194]);
+    // Ligne des 4m (GB) et point de penalty (7m)
+    doc.setDrawColor(123,167,194);doc.setLineWidth(0.5);
+    doc.line(cx+170/350*cw,cy+70/208*ch,cx+180/350*cw,cy+70/208*ch);
+    doc.line(cx+168/350*cw,cy+122.5/208*ch,cx+182/350*cw,cy+122.5/208*ch);
+    // Ligne de but en haut du terrain, comme dans l'appli (but = y=0)
+    doc.setDrawColor(232,70,90);doc.setLineWidth(1);
+    doc.line(cx+148.75/350*cw,cy,cx+201.25/350*cw,cy);
+    // Tirs — x/y enregistrés en % (0-100) par clickCourtPosition(), but en haut,
+    // même repère que l'appli : plus de conversion /350/208 ni d'inversion Y.
     shots.forEach(s=>{
-      const sx=cx+s.x/350*cw, sy=cy+(1-s.y/208)*ch;
+      const sx=cx+s.x/100*cw, sy=cy+s.y/100*ch;
       if(s.goal){
         doc.setFillColor(80,200,120);doc.circle(sx,sy,1.8,"F");
       } else {
