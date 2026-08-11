@@ -4477,11 +4477,11 @@ function generatePDF(){
     shots.forEach(s=>{
       const sx=cx+s.x/100*cw, sy=cy+s.y/100*ch;
       if(s.goal){
-        doc.setFillColor(80,200,120);doc.circle(sx,sy,1.8,"F");
+        doc.setFillColor(80,200,120);doc.circle(sx,sy,1.1,"F");
       } else {
-        doc.setDrawColor(232,70,90);doc.setLineWidth(0.8);
-        doc.line(sx-1.2,sy-1.2,sx+1.2,sy+1.2);
-        doc.line(sx+1.2,sy-1.2,sx-1.2,sy+1.2);
+        doc.setDrawColor(232,70,90);doc.setLineWidth(0.5);
+        doc.line(sx-0.8,sy-0.8,sx+0.8,sy+0.8);
+        doc.line(sx+0.8,sy-0.8,sx-0.8,sy+0.8);
       }
     });
     t3();doc.setFontSize(6);doc.text(label,cx+cw/2,cy+ch+4,{align:"center"});
