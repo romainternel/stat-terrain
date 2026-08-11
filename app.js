@@ -3483,24 +3483,25 @@ function renderBilanMatch(m){
     </div>
   </div>`;
 
-  // Comparison bars
+  // Comparison bars — même set/ordre/style que renderStatCompare() (Stats → Comparaison)
   const rows=[
-    {l:"Buts",a:ms.home.goals,b:ms.away.goals},
+    {l:"Buts/Tirs",a:ms.home.goals+"/"+ms.home.total,b:ms.away.goals+"/"+ms.away.total,ra:ms.home.goals,rb:ms.away.goals},
+    {l:"Pen",a:ms.home.penGoals+"/"+(ms.home.penGoals+ms.home.penSaves+(ms.home.penOffs||0)),b:ms.away.penGoals+"/"+(ms.away.penGoals+ms.away.penSaves+(ms.away.penOffs||0)),ra:ms.home.penGoals,rb:ms.away.penGoals},
     {l:"Efficacité",a:ms.home.eff+"%",b:ms.away.eff+"%",ra:ms.home.eff,rb:ms.away.eff},
-    {l:"Tirs",a:ms.home.total,b:ms.away.total},
-    {l:"PD",a:ms.home.assists,b:ms.away.assists},
-    {l:"PB",a:ms.home.turnovers,b:ms.away.turnovers},
-    {l:"Pen",a:ms.home.penGoals+"/"+(ms.home.penGoals+ms.home.penSaves+(ms.home.penOffs||0)),b:ms.away.penGoals+"/"+(ms.away.penGoals+ms.away.penSaves+(ms.away.penOffs||0))},
-    {l:"Jet franc",a:ms.home.freekick,b:ms.away.freekick},
-    {l:"2 min",a:ms.home.twoMin,b:ms.away.twoMin},
-    {l:"Carton R",a:ms.home.red,b:ms.away.red},
-    {l:"Possessions",a:ms.home.poss,b:ms.away.poss},
+    {l:"Arrêts GB",a:ms.away.saves,b:ms.home.saves,ra:ms.away.saves,rb:ms.home.saves},
+    {l:"Non cadrés",a:ms.home.offs,b:ms.away.offs,ra:ms.home.offs,rb:ms.away.offs},
+    {l:"PB",a:ms.home.turnovers,b:ms.away.turnovers,ra:ms.home.turnovers,rb:ms.away.turnovers},
+    {l:"Jet franc",a:ms.home.freekick,b:ms.away.freekick,ra:ms.home.freekick,rb:ms.away.freekick},
+    {l:"2 min",a:ms.home.twoMin,b:ms.away.twoMin,ra:ms.home.twoMin,rb:ms.away.twoMin},
+    {l:"Carton R",a:ms.home.red,b:ms.away.red,ra:ms.home.red,rb:ms.away.red},
+    {l:"Possessions",a:ms.home.poss,b:ms.away.poss,ra:ms.home.poss,rb:ms.away.poss},
   ];
   html+=`<div style="margin-bottom:16px;">
     ${rows.map(s=>{
       const ra=s.ra!==undefined?s.ra:(parseInt(s.a)||0), rb=s.rb!==undefined?s.rb:(parseInt(s.b)||0);
       const t=ra+rb||1;
-      return `<div class="compare-row">
+      return `<div class="compare-row compare-row-dual">
+        <span class="c-lbl-l">${s.l}</span>
         <span class="cv-a mono" style="color:var(--green)">${s.a}</span>
         <div class="c-bar"><div class="ba" style="width:${ra/t*100}%"></div><div class="bb" style="width:${rb/t*100}%"></div></div>
         <span class="cv-b mono" style="color:var(--red)">${s.b}</span>
@@ -4604,7 +4605,11 @@ function generatePDF(){
   });
   S.events.filter(e=>e.assistId).forEach(e=>{
     const k=e.team+"|"+e.assistId;
-    if(playerStats[k]) playerStats[k].pd++;
+    // Un joueur qui n'a QUE des passes décisives (aucun but/tir/PB/carton à lui)
+    // n'a pas encore d'entrée ici — sans ce fallback sa PD serait silencieusement
+    // perdue (visible maintenant que le tableau liste tous les joueurs).
+    if(!playerStats[k]) playerStats[k]={team:e.team,name:e.assistName,num:e.assistNumber,goals:0,pd:0,tirs:0,pb:0,excl:0};
+    playerStats[k].pd++;
   });
   
   ["home","away"].forEach((side,si)=>{
@@ -4632,9 +4637,7 @@ function generatePDF(){
       t2();doc.setFontSize(7);doc.text(`${flop.goals}/${flop.tirs}T ${flop.pb}PB`,x+50,sy+22);
     }
   });
-  
-  t3();doc.setFontSize(6);doc.text("FENIX STATS - Page 1/3",W/2,H-5,{align:"center"});
-  
+
   // ═══ PAGE 2 - JOUEURS + EVOLUTION ═══
   doc.addPage();bg();
   sky();doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text("JOUEURS FENIX",15,12);
@@ -4654,16 +4657,18 @@ function generatePDF(){
   doc.setDrawColor(123,167,194);doc.setLineWidth(0.3);doc.line(15,ty+1.5,15+colW.reduce((a,b)=>a+b,0),ty+1.5);
   ty+=6;
   
-  // Player rows
-  const hPlayers=Object.values(playerStats).filter(p=>p.team==="home").sort((a,b)=>b.goals-a.goals);
+  // Player rows — tous les joueurs FENIX sélectionnés pour le match, pas
+  // seulement ceux qui ont un événement individuel (but/PD/PB/exclusion) :
+  // un joueur qui a joué sans rien marquer doit quand même apparaître (à 0).
+  const hPlayers=S.home.players.filter(p=>p.selected).map(p=>{
+    const stat=playerStats["home|"+p.id];
+    return stat ? {...stat, position:p.position} : {team:"home",name:p.name,num:p.number,position:p.position,goals:0,pd:0,tirs:0,pb:0,excl:0};
+  }).sort((a,b)=>b.goals-a.goals);
   hPlayers.forEach((p,ri)=>{
     if(ri%2===0){doc.setFillColor(26,40,64);doc.rect(14,ty-3,colW.reduce((a,b)=>a+b,0)+2,7,"F");}
     cx=15;
     const eff=p.tirs>0?Math.round(p.goals/p.tirs*100)+"%":"-";
-    const row=[p.num,p.name,"",String(p.goals),String(p.pd),String(p.tirs),eff,String(p.pb),String(p.excl)];
-    // Find position
-    const pl=S.home.players.find(pp=>pp.name===p.name);
-    row[2]=pl?pl.position:"?";
+    const row=[p.num,p.name,p.position||"?",String(p.goals),String(p.pd),String(p.tirs),eff,String(p.pb),String(p.excl)];
     
     row.forEach((v,i)=>{
       if(i===0){t2();doc.setFontSize(8);doc.setFont("helvetica","bold");}
@@ -4750,8 +4755,37 @@ function generatePDF(){
     doc.setFontSize(3);wh();doc.text("TM",tx_,gy_+2.8,{align:"center"});
   });
   
-  t3();doc.setFontSize(6);doc.text("FENIX STATS - Page 2/3",W/2,H-5,{align:"center"});
-  
+  // ═══ PAGE(S) — CARTES DE TIRS JOUEURS FENIX ═══
+  // Un mini-terrain par joueur ayant au moins un tir enregistré (but/arrêt/non
+  // cadré) — même géométrie/orientation/couleurs que le terrain gardiens.
+  const shotPlayers=S.home.players.filter(p=>p.selected).map(p=>{
+    const shots=S.events.filter(e=>e.team==="home"&&e.playerId===p.id&&e.x!=null&&
+      (ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff))
+      .map(e=>({x:e.x,y:e.y,goal:!!ACTIONS[e.type]?.isGoal}));
+    return {player:p, shots};
+  }).filter(ps=>ps.shots.length>0);
+
+  if(shotPlayers.length>0){
+    doc.addPage();bg();
+    sky();doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text("CARTES DE TIRS — JOUEURS FENIX",15,12);
+    t3();doc.setFontSize(8);doc.setFont("helvetica","normal");
+    doc.text(`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`,W-15,12,{align:"right"});
+
+    const gridCols=3, gap=6, cellW=(W-30-(gridCols-1)*gap)/gridCols, cellH=44, courtH=30;
+    let gpx=15, gpy=20, gcol=0;
+    shotPlayers.forEach(ps=>{
+      if(gpy+cellH>H-10){ doc.addPage();bg(); gpy=20; }
+      const p=ps.player, g=ps.shots.filter(s=>s.goal).length, tt=ps.shots.length;
+      wh();doc.setFontSize(8);doc.setFont("helvetica","bold");
+      doc.text(`#${p.number||"-"} ${p.name}`,gpx,gpy+4);
+      t2();doc.setFontSize(7);doc.setFont("helvetica","normal");
+      doc.text(`${g}/${tt} (${tt>0?Math.round(g/tt*100):0}%)`,gpx+cellW,gpy+4,{align:"right"});
+      drawCourt(gpx,gpy+6,cellW,courtH,ps.shots,"");
+      gcol++;
+      if(gcol>=gridCols){ gcol=0; gpx=15; gpy+=cellH; } else { gpx+=cellW+gap; }
+    });
+  }
+
   // ═══ PAGE 3 - GARDIENS ═══
   doc.addPage();bg();
   sky();doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text("STATISTIQUES GARDIENS",15,12);
@@ -4842,8 +4876,14 @@ function generatePDF(){
     doc.text(lines,20,197);
   }
   
-  t3();doc.setFontSize(6);doc.text("FENIX STATS - Page 3/3",W/2,H-5,{align:"center"});
-  
+  // Pagination dynamique — le nombre de pages varie désormais avec le nombre de
+  // joueurs ayant tiré (cartes de tirs), donc on tamponne "Page X/N" en dernier.
+  const totalPages=doc.internal.getNumberOfPages();
+  for(let pg=1; pg<=totalPages; pg++){
+    doc.setPage(pg);
+    t3();doc.setFontSize(6);doc.text(`FENIX STATS - Page ${pg}/${totalPages}`,W/2,H-5,{align:"center"});
+  }
+
   // Save
   doc.save(`FENIX_${S.journee}_${S.home.name}_vs_${S.away.name}.pdf`);
   showToast("📄 PDF téléchargé !");
