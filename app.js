@@ -3022,7 +3022,7 @@ function renderStatCompare(){
   return `<div class="compare-evo-row">
     <div class="card" style="position:relative;flex:1;min-width:280px;max-width:none;margin:0;">
       <button class="fs-btn" title="Plein écran">⛶</button>
-      <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:10px;padding-right:34px;">
         <span style="font-weight:700;color:var(--green)">${S.home.name}</span>
         <span style="font-weight:700;color:var(--red)">${S.away.name}</span>
       </div>
