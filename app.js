@@ -2147,8 +2147,12 @@ function renderGkBar(hGk,aGk){
 
 function renderMiniCompare(){
   const hGoals=teamScore("home"), aGoals=teamScore("away");
-  const hSaves=teamStat("home","SAVE"), aSaves=teamStat("away","SAVE");
-  const hOff=teamStat("home","OFF"), aOff=teamStat("away","OFF");
+  // Flags isSave/isOff (pas teamStat exact-match) pour inclure les tirs sur pénalty,
+  // comme goals (teamScore, flag isGoal) — cf. matchStats() qui fait déjà pareil.
+  const hSaves=S.events.filter(e=>e.team==="home"&&ACTIONS[e.type]?.isSave).length;
+  const aSaves=S.events.filter(e=>e.team==="away"&&ACTIONS[e.type]?.isSave).length;
+  const hOff=S.events.filter(e=>e.team==="home"&&ACTIONS[e.type]?.isOff).length;
+  const aOff=S.events.filter(e=>e.team==="away"&&ACTIONS[e.type]?.isOff).length;
   const hTotal=hGoals+hSaves+hOff, aTotal=aGoals+aSaves+aOff;
   const hEff=hTotal>0?Math.round(hGoals/hTotal*100):0;
   const aEff=aTotal>0?Math.round(aGoals/aTotal*100):0;
@@ -2674,8 +2678,11 @@ function renderGkTimeline(){
 function autoAnalysis(){
   const insights=[];
   const hScore=teamScore("home"), aScore=teamScore("away");
-  const hTotal=teamStat("home","GOAL")+teamStat("home","SAVE")+teamStat("home","OFF");
-  const aTotal=teamStat("away","GOAL")+teamStat("away","SAVE")+teamStat("away","OFF");
+  // Flags isGoal/isSave/isOff (pas teamStat exact-match "GOAL"/"SAVE"/"OFF") pour
+  // inclure les tirs sur pénalty dans le total, comme hScore/aScore — sinon un but
+  // sur pénalty gonfle le numérateur sans gonfler le dénominateur (efficacité >100%).
+  const hTotal=S.events.filter(e=>e.team==="home"&&(ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff)).length;
+  const aTotal=S.events.filter(e=>e.team==="away"&&(ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff)).length;
   const hEff=hTotal>0?Math.round(hScore/hTotal*100):0;
   const aEff=aTotal>0?Math.round(aScore/aTotal*100):0;
   const hPB=teamStat("home","TURNOVER"), aPB=teamStat("away","TURNOVER");
@@ -2907,25 +2914,25 @@ function openFullscreen(cardEl){
 
 function renderStatCompare(){
   const hGoals=teamScore("home"), aGoals=teamScore("away");
-  const hSaves=teamStat("home","SAVE"), aSaves=teamStat("away","SAVE");
-  const hOff=teamStat("home","OFF"), aOff=teamStat("away","OFF");
+  // Flags isSave/isOff (pas teamStat exact-match) pour inclure les tirs sur pénalty,
+  // comme goals (teamScore, flag isGoal) — cf. matchStats() qui fait déjà pareil.
+  const hSaves=S.events.filter(e=>e.team==="home"&&ACTIONS[e.type]?.isSave).length;
+  const aSaves=S.events.filter(e=>e.team==="away"&&ACTIONS[e.type]?.isSave).length;
+  const hOff=S.events.filter(e=>e.team==="home"&&ACTIONS[e.type]?.isOff).length;
+  const aOff=S.events.filter(e=>e.team==="away"&&ACTIONS[e.type]?.isOff).length;
   const hTotal=hGoals+hSaves+hOff, aTotal=aGoals+aSaves+aOff;
   const hEff=hTotal>0?Math.round(hGoals/hTotal*100):0;
   const aEff=aTotal>0?Math.round(aGoals/aTotal*100):0;
   const hGkSaves=teamStat("away","SAVE");
   const aGkSaves=teamStat("home","SAVE");
-  const hPd=S.events.filter(e=>e.team==="home"&&e.assistId).length;
-  const aPd=S.events.filter(e=>e.team==="away"&&e.assistId).length;
   const hPoss=teamPoss("home"), aPoss=teamPoss("away");
   const stats = [
     {l:"Buts/Tirs",a:hGoals+"/"+hTotal,b:aGoals+"/"+aTotal,ra:hGoals,rb:aGoals},
+    {l:"Pen",a:teamStat("home","PEN_GOAL")+"/"+(teamStat("home","PEN_GOAL")+teamStat("home","PEN_SAVE")+teamStat("home","PEN_OFF")),b:teamStat("away","PEN_GOAL")+"/"+(teamStat("away","PEN_GOAL")+teamStat("away","PEN_SAVE")+teamStat("away","PEN_OFF")),ra:teamStat("home","PEN_GOAL"),rb:teamStat("away","PEN_GOAL")},
     {l:"Efficacité",a:hEff+"%",b:aEff+"%",ra:hEff,rb:aEff},
     {l:"Arrêts GB",a:hGkSaves,b:aGkSaves,ra:hGkSaves,rb:aGkSaves},
-    {l:"PD",a:hPd,b:aPd,ra:hPd,rb:aPd},
     {l:"Non cadrés",a:hOff,b:aOff,ra:hOff,rb:aOff},
     {l:"PB",a:teamStat("home","TURNOVER"),b:teamStat("away","TURNOVER"),ra:teamStat("home","TURNOVER"),rb:teamStat("away","TURNOVER")},
-    {l:"PO",a:teamStat("home","PEN_OBT"),b:teamStat("away","PEN_OBT"),ra:teamStat("home","PEN_OBT"),rb:teamStat("away","PEN_OBT")},
-    {l:"Pen",a:teamStat("home","PEN_GOAL")+"/"+(teamStat("home","PEN_GOAL")+teamStat("home","PEN_SAVE")+teamStat("home","PEN_OFF")),b:teamStat("away","PEN_GOAL")+"/"+(teamStat("away","PEN_GOAL")+teamStat("away","PEN_SAVE")+teamStat("away","PEN_OFF")),ra:teamStat("home","PEN_GOAL"),rb:teamStat("away","PEN_GOAL")},
     {l:"Jet franc",a:teamStat("home","FREEKICK"),b:teamStat("away","FREEKICK"),ra:teamStat("home","FREEKICK"),rb:teamStat("away","FREEKICK")},
     {l:"2 min",a:teamStat("home","TWO_MIN"),b:teamStat("away","TWO_MIN"),ra:teamStat("home","TWO_MIN"),rb:teamStat("away","TWO_MIN")},
     {l:"Carton R",a:teamStat("home","RED"),b:teamStat("away","RED"),ra:teamStat("home","RED"),rb:teamStat("away","RED")},
@@ -3021,7 +3028,8 @@ function renderStatCompare(){
       </div>
       ${stats.map(s=>{
         const t=s.ra+s.rb||1;
-        return `<div class="compare-row">
+        return `<div class="compare-row compare-row-dual">
+          <span class="c-lbl-l">${s.l}</span>
           <span class="cv-a mono" style="color:var(--green)">${s.a}</span>
           <div class="c-bar"><div class="ba" style="width:${s.ra/t*100}%"></div><div class="bb" style="width:${s.rb/t*100}%"></div></div>
           <span class="cv-b mono" style="color:var(--red)">${s.b}</span>
@@ -4415,8 +4423,10 @@ function generatePDF(){
   const doc=new jsPDF({unit:"mm",format:"a4"});
   const W=210,H=297;
   const hScore=teamScore("home"),aScore=teamScore("away");
-  const hTotal=teamStat("home","GOAL")+teamStat("home","SAVE")+teamStat("home","OFF");
-  const aTotal=teamStat("away","GOAL")+teamStat("away","SAVE")+teamStat("away","OFF");
+  // Flags isGoal/isSave/isOff (pas teamStat exact-match) pour inclure les tirs sur
+  // pénalty, comme hScore/aScore — voir même correctif dans autoAnalysis().
+  const hTotal=S.events.filter(e=>e.team==="home"&&(ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff)).length;
+  const aTotal=S.events.filter(e=>e.team==="away"&&(ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff)).length;
   const hEff=hTotal>0?Math.round(hScore/hTotal*100):0;
   const aEff=aTotal>0?Math.round(aScore/aTotal*100):0;
 

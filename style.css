@@ -373,6 +373,8 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .compare-row .c-bar .ba{background:linear-gradient(90deg,var(--green),rgba(123,167,194,.4));border-radius:3px 0 0 3px;transition:width .4s;}
 .compare-row .c-bar .bb{background:linear-gradient(90deg,rgba(255,64,96,.4),var(--red));border-radius:0 3px 3px 0;margin-left:auto;transition:width .4s;}
 .compare-row .c-lbl{font-size:13px;color:var(--t3);width:80px;}
+.compare-row-dual .c-lbl{width:58px;font-size:11px;flex-shrink:0;}
+.compare-row-dual .c-lbl-l{font-size:11px;color:var(--t3);width:58px;text-align:right;flex-shrink:0;}
 
 /* ── MODAL (add player etc) ── */
 .modal{background:#1A1A32;border-radius:14px;padding:22px;width:min(360px,90vw);border:1px solid var(--border);}
