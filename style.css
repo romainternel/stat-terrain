@@ -662,6 +662,12 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 /* Landscape */
 @media (orientation:landscape) and (min-width:700px){
   body{overflow:hidden;height:100dvh;}
+  /* Écrans hors Match (Équipes/Stats/Bilan/Matchs) n'ont pas de conteneur de
+     scroll interne dédié comme .ml-court ci-dessous — sans ce fallback, le
+     contenu qui dépasse 100dvh est juste coupé, inatteignable (body est en
+     overflow:hidden). Neutre pour l'écran Match : .match-layout remplit déjà
+     exactement l'espace disponible via son propre scroll interne. */
+  #app{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .match-layout{height:calc(100dvh - 78px);}
   .ml-left{height:100%;overflow-y:auto;}
   .ml-right{height:100%;overflow:hidden;}

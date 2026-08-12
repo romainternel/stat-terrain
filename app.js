@@ -3,16 +3,17 @@
 // ═══════════════════════════════════════════════════════
 const POSITIONS=["GB","ALG","ARG","DC","PVT","ARD","ALD","?"];
 const POS_L={GB:"Gardien",ALG:"Ailier G",ARG:"Arrière G",DC:"Demi-centre",PVT:"Pivot",ARD:"Arrière D",ALD:"Ailier D","?":"Inconnu"};
-// Court position coordinates (% of court width/height), goal is at TOP
-// GB at very top, PVT between 6m/9m, DC/ARR near bottom
+// Court position coordinates (% of court width/height), goal is at TOP.
+// anchor:"left"/"right" fait affleurer le BORD de l'encart joueur (pas son centre)
+// sur la ligne de touche correspondante, quelle que soit sa largeur — cf. cpBoxStyle().
 const POS_XY={
-  GB:  {x:50, y:6,  spread:"h"},
-  ALG: {x:8,  y:20},
-  ALD: {x:92, y:20},
-  PVT: {x:50, y:30, spread:"h"},
-  ARG: {x:22, y:65},
-  DC:  {x:50, y:72},
-  ARD: {x:78, y:65},
+  GB:  {x:50, y:8},                   // empilés verticalement (spread par défaut), près de la ligne de but
+  ALG: {x:0,  y:4,  anchor:"left"},   // coin haut-gauche, bord aligné sur la ligne de touche
+  ALD: {x:100,y:4,  anchor:"right"},  // coin haut-droit, miroir
+  PVT: {x:50, y:59, spread:"h"},      // point de penalty (7m), groupés ensemble au centre
+  ARG: {x:0,  y:76, anchor:"left"},   // 9m, bord aligné sur la ligne de touche gauche
+  ARD: {x:100,y:76, anchor:"right"},  // 9m, miroir
+  DC:  {x:50, y:88},                  // centré, en retrait derrière l'alignement ARG/ARD
   "?": {x:50, y:85},
 };
 
@@ -1738,7 +1739,7 @@ function renderMatchPanel(){
         const isSh=ap&&ap.shooterId===p.id;
         const clr=isSh?"var(--fenix-sky)":ap?accent:(S.selectedAction?accent:"var(--t3)");
         return `<div class="cp-player ${isSh?"shooter":""}" data-ap-player="${p.id}"
-             style="left:${p.cx}%;top:${p.cy}%;border-color:${clr};${!ap&&!S.selectedAction?"opacity:.45;":""}">
+             style="${cpBoxStyle(p)}border-color:${clr};${!ap&&!S.selectedAction?"opacity:.45;":""}">
           <div class="cp-num ${p.number?"":"cp-num-missing"}" style="color:${clr}">${displayNumber(p)}</div>
           <div class="cp-name">${p.name}</div>
         </div>`;
@@ -1797,7 +1798,7 @@ function renderPenRoster(ap){
     ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>{
       const isPenShooter=p.id===ap.shooterId;
       return `<div class="cp-player ${isPenShooter?"pen-shooter":"pen-other"}" data-ap-player="${p.id}"
-           style="left:${p.cx}%;top:${p.cy}%;">
+           style="${cpBoxStyle(p)}">
         <div class="cp-num ${p.number?"":"cp-num-missing"}">${displayNumber(p)}</div>
         <div class="cp-name">${p.name}</div>
       </div>`;
@@ -2207,7 +2208,7 @@ function renderPdSelect(){
       <svg class="court-svg-bg" viewBox="0 0 350 208" preserveAspectRatio="none">${courtSvgMarkup()}</svg>
         ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>`
           <div class="cp-player" data-pick-pd="${p.id}"
-               style="left:${p.cx}%;top:${p.cy}%;border-color:var(--yellow);">
+               style="${cpBoxStyle(p)}border-color:var(--yellow);">
             <div class="cp-num ${p.number?"":"cp-num-missing"}" style="color:var(--yellow)">${displayNumber(p)}</div>
             <div class="cp-name">${p.name}</div>
           </div>
@@ -2257,6 +2258,15 @@ function renderCourtEmptyState(){
 
 function displayNumber(p){ return p.number ? p.number : "–"; }
 
+// Style CSS d'un encart joueur sur le terrain, à partir de {cx,cy,anchor} produit par
+// courtPlayerPositions(). anchor:"left"/"right" ancre le BORD de l'encart (pas son centre,
+// donc indépendant de sa largeur — variable selon la longueur du nom) sur la ligne de touche.
+function cpBoxStyle(p){
+  if(p.anchor==="left") return `left:${p.cx}%;top:${p.cy}%;transform:translateY(-50%);`;
+  if(p.anchor==="right") return `right:${100-p.cx}%;top:${p.cy}%;transform:translateY(-50%);`;
+  return `left:${p.cx}%;top:${p.cy}%;`;
+}
+
 function courtPlayerPositions(roster){
   const groups={};
   roster.forEach(p=>{
@@ -2267,21 +2277,23 @@ function courtPlayerPositions(roster){
   const result=[];
   Object.entries(groups).forEach(([pos,players])=>{
     const base=POS_XY[pos]||POS_XY["?"];
+    const anchor=base.anchor||"center";
     if(players.length===1){
-      result.push({...players[0], cx:base.x, cy:base.y});
+      result.push({...players[0], cx:base.x, cy:base.y, anchor});
     } else if(base.spread==="h"){
-      // Spread horizontally (GB, PVT)
+      // Spread horizontally (PVT — groupés ensemble, centrés)
       const hSpread=Math.min(16, 70/players.length);
       players.forEach((p,i)=>{
         const offset=(i-(players.length-1)/2)*hSpread;
-        result.push({...p, cx:Math.max(6,Math.min(94,base.x+offset)), cy:base.y});
+        result.push({...p, cx:Math.max(6,Math.min(94,base.x+offset)), cy:base.y, anchor});
       });
     } else {
-      // Spread vertically (ARG, DC, ARD, etc.)
+      // Spread vertically (GB, ARG, DC, ARD, etc.) — cx reste sur la ligne de touche
+      // pour les positions ancrées (ARG/ARD), seule la profondeur (cy) varie.
       const vSpread=13;
       players.forEach((p,i)=>{
         const offset=(i-(players.length-1)/2)*vSpread;
-        result.push({...p, cx:base.x, cy:Math.max(4,Math.min(96,base.y+offset))});
+        result.push({...p, cx:base.x, cy:Math.max(4,Math.min(96,base.y+offset)), anchor});
       });
     }
   });
@@ -2305,7 +2317,7 @@ function renderPlayerSelect(){
       <svg class="court-svg-bg" viewBox="0 0 350 208" preserveAspectRatio="none">${courtSvgMarkup()}</svg>
         ${roster.length===0 ? renderCourtEmptyState() : positioned.map(p=>`
           <div class="cp-player" data-pick-player="${p.id}"
-               style="left:${p.cx}%;top:${p.cy}%;border-color:${accent};">
+               style="${cpBoxStyle(p)}border-color:${accent};">
             <div class="cp-num ${p.number?"":"cp-num-missing"}" style="color:${accent}">${displayNumber(p)}</div>
             <div class="cp-name">${p.name}</div>
           </div>
@@ -4431,8 +4443,19 @@ function generatePDF(){
   const hEff=hTotal>0?Math.round(hScore/hTotal*100):0;
   const aEff=aTotal>0?Math.round(aScore/aTotal*100):0;
 
-  function bg(){doc.setFillColor(13,27,42);doc.rect(0,0,W,H,"F");}
+  // Fond de page blanc, contenu toujours porté par des encarts bleus (card()) —
+  // jamais de texte posé directement sur le fond blanc, sans quoi les couleurs
+  // claires prévues pour un fond sombre deviendraient illisibles.
+  function bg(){doc.setFillColor(255,255,255);doc.rect(0,0,W,H,"F");}
   function card(x,y,w,h){doc.setFillColor(26,40,64);doc.roundedRect(x,y,w,h,3,3,"F");}
+  // Bandeau bleu pleine largeur en tête de chaque page — hauteur calée sur l'espace
+  // qu'occupait l'ancien titre en ligne (texte seul) pour ne décaler aucune autre
+  // coordonnée du reste de la page.
+  function pageHeader(title,subtitle){
+    doc.setFillColor(26,40,64);doc.rect(0,0,W,12,"F");
+    sky();doc.setFontSize(11);doc.setFont("helvetica","bold");doc.text(title,15,8);
+    t2();doc.setFontSize(7);doc.setFont("helvetica","normal");doc.text(subtitle,W-15,8,{align:"right"});
+  }
   function sky(){doc.setTextColor(123,167,194);}
   function grn(){doc.setTextColor(80,200,120);}
   function red(){doc.setTextColor(232,70,90);}
@@ -4528,12 +4551,33 @@ function generatePDF(){
     // Goal bar at bottom
     doc.setFillColor(123,167,194);doc.rect(gx,gy+gh,gw-0.5,1,"F");
   }
+  // Version compacte de drawGoalZone() pour la carte tir joueur : zones d'impact
+  // d'UN SEUL joueur (pas d'un gardien), affichée seulement si la saisie expert
+  // (S.trackGK) a effectivement enregistré au moins une zone sur ses tirs.
+  function drawPlayerZoneGrid(gx,gy,gw,gh,shots){
+    const zones=["HG","HC","HD","MG","MC","MD","BG","BC","BD"];
+    const data={}; zones.forEach(z=>{data[z]={g:0,t:0};});
+    shots.forEach(s=>{ if(!s.zone||!data[s.zone]) return; data[s.zone].t++; if(s.goal) data[s.zone].g++; });
+    const cellW=gw/3, cellH=gh/3;
+    zones.forEach((z,i)=>{
+      const col=i%3, row=Math.floor(i/3);
+      const x=gx+col*cellW, y=gy+row*cellH;
+      const d=data[z];
+      if(d.t>0){ doc.setFillColor(...(d.g/d.t>0.5?[80,200,120]:[232,70,90])); }
+      else doc.setFillColor(36,51,82);
+      doc.rect(x,y,cellW-0.3,cellH-0.3,"F");
+      if(d.t>0){
+        wh();doc.setFontSize(5);doc.setFont("helvetica","bold");
+        doc.text(`${d.g}/${d.t}`,x+cellW/2-0.15,y+cellH/2+0.7,{align:"center"});
+      }
+    });
+    doc.setFillColor(232,70,90);doc.rect(gx,gy+gh,gw-0.3,0.8,"F");
+  }
 
   // ═══ PAGE 1 - COMPARATIF ═══
   bg();
-  sky();doc.setFontSize(9);doc.setFont("helvetica","bold");doc.text("FENIX STATS",15,8);
-  t3();doc.setFontSize(7);doc.setFont("helvetica","normal");doc.text("Rapport de match",W-15,8,{align:"right"});
-  
+  pageHeader("FENIX STATS","Rapport de match");
+
   card(15,12,W-30,27);
   t3();doc.setFontSize(9);doc.text(`${S.season}  ·  ${S.journee}  ·  ${new Date().toLocaleDateString("fr-FR")}`,W/2,18,{align:"center"});
   grn();doc.setFontSize(16);doc.setFont("helvetica","bold");doc.text(S.home.name,W/2-38,28,{align:"right"});
@@ -4615,38 +4659,61 @@ function generatePDF(){
   ["home","away"].forEach((side,si)=>{
     const x=si===0?15:W/2+2.5;
     const cw=(W-35)/2;
-    card(x,sy+2,cw,26);
+    // Classement mixte joueurs de champ + gardien : un but pèse un peu plus qu'une
+    // PD (score=buts*3+pd), un gardien n'entre en lice que sur grosse perf (≥40%
+    // d'arrêts sur au moins 6 arrêts) avec un poids comparable (score=arrêts*3) —
+    // sinon il ne ressortirait jamais face à des buteurs.
+    const gkId=S[side].gkId;
+    const gk=gkId?S[side].players.find(p=>p.id===gkId):null;
+    const gkS=gkId?gkStats(gkId):null;
+    const gkQualifies=gk&&gkS&&gkS.totalAll>0&&gkS.saves>=6&&(gkS.saves/gkS.totalAll)>=0.4;
+    const sp=Object.values(playerStats).filter(p=>p.team===side)
+      .map(p=>({...p, kind:"player", score:p.goals*3+p.pd}));
+    if(gkQualifies) sp.push({kind:"gk", name:gk.name, num:gk.number,
+      saves:gkS.saves, totalAll:gkS.totalAll, pct:Math.round(gkS.saves/gkS.totalAll*100), score:gkS.saves*3});
+    const top3=sp.sort((a,b)=>b.score-a.score).slice(0,3);
+
+    const cardH=12+top3.length*8;
+    card(x,sy+2,cw,cardH);
     if(si===0)grn();else red();
     doc.setFontSize(9);doc.setFont("helvetica","bold");
-    doc.text(si===0?"FENIX":"ADVERSAIRE",x+4,sy+8);
-    
-    const sp=Object.values(playerStats).filter(p=>p.team===side);
-    const top=sp.sort((a,b)=>(b.goals+b.pd)-(a.goals+a.pd))[0];
-    const flop=sp.filter(p=>p.tirs>=2).sort((a,b)=>{
-      const ae=a.tirs>0?a.goals/a.tirs:1;const be=b.tirs>0?b.goals/b.tirs:1;return ae-be;
-    })[0];
-    
-    if(top){
-      grn();doc.setFontSize(7);doc.text("★ TOP",x+4,sy+15);
-      wh();doc.setFontSize(8);doc.text(`#${top.num} ${top.name}`,x+18,sy+15);
-      t2();doc.setFontSize(7);doc.text(`${top.goals}B ${top.pd}PD ${top.tirs>0?Math.round(top.goals/top.tirs*100)+"% eff":""}`,x+50,sy+15);
-    }
-    if(flop&&flop!==top){
-      red();doc.setFontSize(7);doc.text("▼ FLOP",x+4,sy+22);
-      wh();doc.setFontSize(8);doc.text(`#${flop.num} ${flop.name}`,x+20,sy+22);
-      t2();doc.setFontSize(7);doc.text(`${flop.goals}/${flop.tirs}T ${flop.pb}PB`,x+50,sy+22);
-    }
+    doc.text((si===0?"FENIX":"ADVERSAIRE")+" — TOP 3",x+4,sy+8);
+
+    let ry=sy+15;
+    top3.forEach((p,i)=>{
+      const rank=i===0?"★":(i+1)+".";
+      wh();doc.setFontSize(8);doc.setFont("helvetica","bold");
+      doc.text(`${rank} #${p.num} ${p.name}`,x+4,ry);
+      t2();doc.setFontSize(7);doc.setFont("helvetica","normal");
+      const line=p.kind==="gk"
+        ? `GB ${p.saves}/${p.totalAll} arrets (${p.pct}%)`
+        : `${p.goals}B ${p.pd}PD${p.tirs>0?" - "+Math.round(p.goals/p.tirs*100)+"%":""}`;
+      doc.text(line,x+cw-4,ry,{align:"right"});
+      ry+=8;
+    });
   });
 
   // ═══ PAGE 2 - JOUEURS + EVOLUTION ═══
   doc.addPage();bg();
-  sky();doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text("JOUEURS FENIX",15,12);
-  t3();doc.setFontSize(8);doc.setFont("helvetica","normal");
-  doc.text(`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`,W-15,12,{align:"right"});
-  
+  pageHeader("JOUEURS FENIX",`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`);
+
   const cols=["#","NOM","POSTE","BUTS","PD","TIRS","EFF%","PB","2M"];
   const colW=[10,28,15,13,12,13,15,12,12];
   let ty=20;
+
+  // Player rows — tous les joueurs FENIX sélectionnés pour le match, pas
+  // seulement ceux qui ont un événement individuel (but/PD/PB/exclusion) :
+  // un joueur qui a joué sans rien marquer doit quand même apparaître (à 0).
+  const hPlayers=S.home.players.filter(p=>p.selected).map(p=>{
+    const stat=playerStats["home|"+p.id];
+    return stat ? {...stat, position:p.position} : {team:"home",name:p.name,num:p.number,position:p.position,goals:0,pd:0,tirs:0,pb:0,excl:0};
+  }).sort((a,b)=>b.goals-a.goals);
+
+  // Fond bleu derrière tout le tableau — les lignes impaires n'ont pas leur propre
+  // fond (juste la ligne paire ci-dessous), sans cette card() elles se
+  // retrouveraient directement sur le fond blanc de la page.
+  card(13,13,W-26,10+hPlayers.length*7);
+
   // Header
   sky();doc.setFontSize(7);doc.setFont("helvetica","bold");
   let cx=15;
@@ -4656,16 +4723,9 @@ function generatePDF(){
   });
   doc.setDrawColor(123,167,194);doc.setLineWidth(0.3);doc.line(15,ty+1.5,15+colW.reduce((a,b)=>a+b,0),ty+1.5);
   ty+=6;
-  
-  // Player rows — tous les joueurs FENIX sélectionnés pour le match, pas
-  // seulement ceux qui ont un événement individuel (but/PD/PB/exclusion) :
-  // un joueur qui a joué sans rien marquer doit quand même apparaître (à 0).
-  const hPlayers=S.home.players.filter(p=>p.selected).map(p=>{
-    const stat=playerStats["home|"+p.id];
-    return stat ? {...stat, position:p.position} : {team:"home",name:p.name,num:p.number,position:p.position,goals:0,pd:0,tirs:0,pb:0,excl:0};
-  }).sort((a,b)=>b.goals-a.goals);
+
   hPlayers.forEach((p,ri)=>{
-    if(ri%2===0){doc.setFillColor(26,40,64);doc.rect(14,ty-3,colW.reduce((a,b)=>a+b,0)+2,7,"F");}
+    if(ri%2===0){doc.setFillColor(36,51,82);doc.rect(14,ty-3,colW.reduce((a,b)=>a+b,0)+2,7,"F");}
     cx=15;
     const eff=p.tirs>0?Math.round(p.goals/p.tirs*100)+"%":"-";
     const row=[p.num,p.name,p.position||"?",String(p.goals),String(p.pd),String(p.tirs),eff,String(p.pb),String(p.excl)];
@@ -4710,24 +4770,25 @@ function generatePDF(){
   });
   const ms=Math.max(hR,aR,1);
   
-  // Grid
-  doc.setDrawColor(255,255,255);doc.setLineWidth(0.1);
+  // Grid — lignes et libellés éclaircis (40,50,65 se distinguait à peine du fond
+  // de carte 26,40,64) et épaissis pour plus de netteté à l'impression.
+  doc.setLineWidth(0.15);
   for(let i=0;i<=ms;i+=Math.max(1,Math.ceil(ms/6))){
     const ly=gy_-(i/ms)*gh_;
-    doc.setDrawColor(40,50,65);doc.line(gx,ly,gx+gw_,ly);
-    t3();doc.setFontSize(5);doc.text(String(i),gx-2,ly+1,{align:"right"});
+    doc.setDrawColor(70,85,105);doc.line(gx,ly,gx+gw_,ly);
+    t2();doc.setFontSize(6);doc.text(String(i),gx-2,ly+1,{align:"right"});
   }
   for(let m=0;m<=60;m+=10){
-    t3();doc.setFontSize(5);doc.text(m+"'",gx+(m/60)*gw_,gy_+4,{align:"center"});
+    t2();doc.setFontSize(6);doc.text(m+"'",gx+(m/60)*gw_,gy_+4,{align:"center"});
   }
   // Half-time
-  doc.setDrawColor(240,199,94);doc.setLineWidth(0.3);
+  doc.setDrawColor(240,199,94);doc.setLineWidth(0.4);
   const htx_=gx+0.5*gw_;
   doc.setLineDashPattern([2,1.5],0);doc.line(htx_,gy_-gh_,htx_,gy_);doc.setLineDashPattern([],0);
-  
+
   // Lines
   function drawPts(data,color,isHome){
-    doc.setDrawColor(...color);doc.setLineWidth(1.5);
+    doc.setDrawColor(...color);doc.setLineWidth(1.8);
     for(let i=1;i<data.length;i++){
       const x1=gx+(data[i-1].m/60)*gw_,y1=gy_-((isHome?data[i-1].h:data[i-1].a)/ms)*gh_;
       const x2=gx+(data[i].m/60)*gw_,y2=gy_-((isHome?data[i].h:data[i].a)/ms)*gh_;
@@ -4736,7 +4797,7 @@ function generatePDF(){
     data.forEach(p=>{
       if((isHome&&p.who==="home")||(!isHome&&p.who==="away")||p.who===null){
         const px=gx+(p.m/60)*gw_,py=gy_-((isHome?p.h:p.a)/ms)*gh_;
-        doc.setFillColor(...color);doc.circle(px,py,1,"F");
+        doc.setFillColor(...color);doc.circle(px,py,1.3,"F");
       }
     });
   }
@@ -4755,32 +4816,39 @@ function generatePDF(){
     doc.setFontSize(3);wh();doc.text("TM",tx_,gy_+2.8,{align:"center"});
   });
   
-  // ═══ PAGE(S) — CARTES DE TIRS JOUEURS FENIX ═══
+  // ═══ PAGE(S) — CARTE TIR JOUEUR ═══
   // Un mini-terrain par joueur ayant au moins un tir enregistré (but/arrêt/non
-  // cadré) — même géométrie/orientation/couleurs que le terrain gardiens.
+  // cadré), avec sa zone d'impact si la saisie expert (S.trackGK) l'a capturée,
+  // et son nombre de pertes de balle — même géométrie/orientation/couleurs que
+  // le terrain gardiens.
   const shotPlayers=S.home.players.filter(p=>p.selected).map(p=>{
     const shots=S.events.filter(e=>e.team==="home"&&e.playerId===p.id&&e.x!=null&&
       (ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff))
-      .map(e=>({x:e.x,y:e.y,goal:!!ACTIONS[e.type]?.isGoal}));
-    return {player:p, shots};
+      .map(e=>({x:e.x,y:e.y,goal:!!ACTIONS[e.type]?.isGoal,zone:e.goalZone||null}));
+    const pb=S.events.filter(e=>e.team==="home"&&e.playerId===p.id&&e.type==="TURNOVER").length;
+    return {player:p, shots, pb};
   }).filter(ps=>ps.shots.length>0);
 
   if(shotPlayers.length>0){
     doc.addPage();bg();
-    sky();doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text("CARTES DE TIRS — JOUEURS FENIX",15,12);
-    t3();doc.setFontSize(8);doc.setFont("helvetica","normal");
-    doc.text(`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`,W-15,12,{align:"right"});
+    pageHeader("CARTE TIR JOUEUR",`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`);
 
-    const gridCols=3, gap=6, cellW=(W-30-(gridCols-1)*gap)/gridCols, cellH=44, courtH=30;
-    let gpx=15, gpy=20, gcol=0;
+    const gridCols=2, gap=6, cellW=(W-30-(gridCols-1)*gap)/gridCols, cellH=46;
+    const courtW=cellW*0.58, courtH=28, zoneX=courtW+8, zoneW=cellW-zoneX-3, zoneH=20;
+    let gpx=15, gpy=18, gcol=0;
     shotPlayers.forEach(ps=>{
-      if(gpy+cellH>H-10){ doc.addPage();bg(); gpy=20; }
+      if(gpy+cellH>H-10){ doc.addPage();bg(); gpy=18; }
       const p=ps.player, g=ps.shots.filter(s=>s.goal).length, tt=ps.shots.length;
+      card(gpx,gpy,cellW,cellH-3);
       wh();doc.setFontSize(8);doc.setFont("helvetica","bold");
-      doc.text(`#${p.number||"-"} ${p.name}`,gpx,gpy+4);
-      t2();doc.setFontSize(7);doc.setFont("helvetica","normal");
-      doc.text(`${g}/${tt} (${tt>0?Math.round(g/tt*100):0}%)`,gpx+cellW,gpy+4,{align:"right"});
-      drawCourt(gpx,gpy+6,cellW,courtH,ps.shots,"");
+      doc.text(`#${p.number||"-"} ${p.name}`,gpx+3,gpy+6);
+      t2();doc.setFontSize(6);doc.setFont("helvetica","normal");
+      doc.text(`${g}B ${tt}T (${tt>0?Math.round(g/tt*100):0}%) - ${ps.pb}PB`,gpx+cellW-3,gpy+6,{align:"right"});
+      drawCourt(gpx+3,gpy+9,courtW,courtH,ps.shots,"");
+      if(ps.shots.some(s=>s.zone)){
+        t3();doc.setFontSize(5);doc.text("Impact",gpx+zoneX,gpy+9);
+        drawPlayerZoneGrid(gpx+zoneX,gpy+11,zoneW,zoneH,ps.shots);
+      }
       gcol++;
       if(gcol>=gridCols){ gcol=0; gpx=15; gpy+=cellH; } else { gpx+=cellW+gap; }
     });
@@ -4788,10 +4856,8 @@ function generatePDF(){
 
   // ═══ PAGE 3 - GARDIENS ═══
   doc.addPage();bg();
-  sky();doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text("STATISTIQUES GARDIENS",15,12);
-  t3();doc.setFontSize(8);doc.setFont("helvetica","normal");
-  doc.text(`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`,W-15,12,{align:"right"});
-  
+  pageHeader("STATISTIQUES GARDIENS",`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`);
+
   const halfW=(W-35)/2;
   
   // For each side: GK stats + goal zone + court
