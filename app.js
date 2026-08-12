@@ -7,13 +7,13 @@ const POS_L={GB:"Gardien",ALG:"Ailier G",ARG:"Arrière G",DC:"Demi-centre",PVT:"
 // anchor:"left"/"right" fait affleurer le BORD de l'encart joueur (pas son centre)
 // sur la ligne de touche correspondante, quelle que soit sa largeur — cf. cpBoxStyle().
 const POS_XY={
-  GB:  {x:50, y:8},                   // empilés verticalement (spread par défaut), près de la ligne de but
-  ALG: {x:0,  y:4,  anchor:"left"},   // coin haut-gauche, bord aligné sur la ligne de touche
-  ALD: {x:100,y:4,  anchor:"right"},  // coin haut-droit, miroir
-  PVT: {x:50, y:59, spread:"h"},      // point de penalty (7m), groupés ensemble au centre
-  ARG: {x:0,  y:76, anchor:"left"},   // 9m, bord aligné sur la ligne de touche gauche
-  ARD: {x:100,y:76, anchor:"right"},  // 9m, miroir
-  DC:  {x:50, y:88},                  // centré, en retrait derrière l'alignement ARG/ARD
+  GB:  {x:50, y:10},                            // empilés verticalement (spread par défaut), près de la ligne de but
+  ALG: {x:0,  y:11, anchor:"left"},             // coin haut-gauche, bord aligné sur la ligne de touche
+  ALD: {x:100,y:11, anchor:"right"},            // coin haut-droit, miroir
+  PVT: {x:50, y:59, spread:"h", hSpread:26},    // point de penalty (7m), groupés ensemble au centre
+  ARG: {x:0,  y:76, anchor:"left"},             // 9m, bord aligné sur la ligne de touche gauche
+  ARD: {x:100,y:76, anchor:"right"},            // 9m, miroir
+  DC:  {x:50, y:88},                            // centré, en retrait derrière l'alignement ARG/ARD
   "?": {x:50, y:85},
 };
 
@@ -2281,8 +2281,10 @@ function courtPlayerPositions(roster){
     if(players.length===1){
       result.push({...players[0], cx:base.x, cy:base.y, anchor});
     } else if(base.spread==="h"){
-      // Spread horizontally (PVT — groupés ensemble, centrés)
-      const hSpread=Math.min(16, 70/players.length);
+      // Spread horizontally (PVT — groupés ensemble, centrés). hSpread réglable
+      // par position (POS_XY) car des noms longs sur 2 joueurs se chevauchaient
+      // avec l'écart par défaut, trop juste pour la largeur réelle des encarts.
+      const hSpread=base.hSpread||Math.min(16, 70/players.length);
       players.forEach((p,i)=>{
         const offset=(i-(players.length-1)/2)*hSpread;
         result.push({...p, cx:Math.max(6,Math.min(94,base.x+offset)), cy:base.y, anchor});
@@ -4687,73 +4689,84 @@ function generatePDF(){
       t2();doc.setFontSize(7);doc.setFont("helvetica","normal");
       const line=p.kind==="gk"
         ? `GB ${p.saves}/${p.totalAll} arrets (${p.pct}%)`
-        : `${p.goals}B ${p.pd}PD${p.tirs>0?" - "+Math.round(p.goals/p.tirs*100)+"%":""}`;
+        : `${p.goals}/${p.tirs}T (${p.tirs>0?Math.round(p.goals/p.tirs*100):0}%) - ${p.pd}PD - ${p.pb}PB`;
       doc.text(line,x+cw-4,ry,{align:"right"});
       ry+=8;
     });
   });
 
   // ═══ PAGE 2 - JOUEURS + EVOLUTION ═══
+  // Tableau réutilisable pour FENIX ET l'adversaire — centré dans la largeur de
+  // page (colonnes ne totalisant que 130mm sur ~180mm disponibles, d'où le
+  // décalage à droite plutôt que de forcer les colonnes à une largeur ne
+  // supportant pas les noms composés, ce qui provoquait un chevauchement).
+  function drawPlayerTable(x,y,players){
+    const cols=["#","NOM","POSTE","BUTS","PD","TIRS","EFF%","PB","2M"];
+    const colW=[10,28,15,13,12,13,15,12,12];
+    const totalW=colW.reduce((a,b)=>a+b,0);
+    card(x-2,y,totalW+4,10+players.length*7);
+    let ty=y+7, cx=x;
+    sky();doc.setFontSize(7);doc.setFont("helvetica","bold");
+    cols.forEach((c_,i)=>{
+      if(i<=2)doc.text(c_,cx+2,ty);else doc.text(c_,cx+colW[i]/2,ty,{align:"center"});
+      cx+=colW[i];
+    });
+    doc.setDrawColor(123,167,194);doc.setLineWidth(0.3);doc.line(x,ty+1.5,x+totalW,ty+1.5);
+    ty+=6;
+    players.forEach((p,ri)=>{
+      if(ri%2===0){doc.setFillColor(36,51,82);doc.rect(x-1,ty-3,totalW+2,7,"F");}
+      cx=x;
+      const eff=p.tirs>0?Math.round(p.goals/p.tirs*100)+"%":"-";
+      const row=[p.num,p.name,p.position||"?",String(p.goals),String(p.pd),String(p.tirs),eff,String(p.pb),String(p.excl)];
+      row.forEach((v,i)=>{
+        if(i===0){t2();doc.setFontSize(8);doc.setFont("helvetica","bold");}
+        else if(i===1){wh();doc.setFontSize(8);doc.setFont("helvetica","bold");}
+        else if(i===3){grn();doc.setFontSize(9);doc.setFont("helvetica","bold");}
+        else if(i===4){doc.setTextColor(240,199,94);doc.setFontSize(8);doc.setFont("helvetica","bold");}
+        else if(i===6){
+          const ev=parseInt(v);
+          if(!isNaN(ev)){if(ev>=70)grn();else if(ev>=50)doc.setTextColor(240,199,94);else red();}else t3();
+          doc.setFontSize(8);doc.setFont("helvetica","bold");
+        }
+        else if(i>=7){
+          if(v!=="0")red();else t3();
+          doc.setFontSize(8);doc.setFont("helvetica","normal");
+        }
+        else{t2();doc.setFontSize(8);doc.setFont("helvetica","normal");}
+        if(i<=2)doc.text(String(v),cx+2,ty);else doc.text(String(v),cx+colW[i]/2,ty,{align:"center"});
+        cx+=colW[i];
+      });
+      ty+=7;
+    });
+    return y+10+players.length*7;
+  }
+
   doc.addPage();bg();
-  pageHeader("JOUEURS FENIX",`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`);
+  pageHeader("JOUEURS",`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`);
 
-  const cols=["#","NOM","POSTE","BUTS","PD","TIRS","EFF%","PB","2M"];
-  const colW=[10,28,15,13,12,13,15,12,12];
-  let ty=20;
+  const tableX=15+(W-30-130)/2;
 
-  // Player rows — tous les joueurs FENIX sélectionnés pour le match, pas
-  // seulement ceux qui ont un événement individuel (but/PD/PB/exclusion) :
-  // un joueur qui a joué sans rien marquer doit quand même apparaître (à 0).
+  // Player rows — tous les joueurs sélectionnés pour le match, pas seulement
+  // ceux qui ont un événement individuel (but/PD/PB/exclusion) : un joueur qui
+  // a joué sans rien marquer doit quand même apparaître (à 0).
   const hPlayers=S.home.players.filter(p=>p.selected).map(p=>{
     const stat=playerStats["home|"+p.id];
     return stat ? {...stat, position:p.position} : {team:"home",name:p.name,num:p.number,position:p.position,goals:0,pd:0,tirs:0,pb:0,excl:0};
   }).sort((a,b)=>b.goals-a.goals);
+  const aPlayers=S.away.players.filter(p=>p.selected).map(p=>{
+    const stat=playerStats["away|"+p.id];
+    return stat ? {...stat, position:p.position} : {team:"away",name:p.name,num:p.number,position:p.position,goals:0,pd:0,tirs:0,pb:0,excl:0};
+  }).sort((a,b)=>b.goals-a.goals);
 
-  // Fond bleu derrière tout le tableau — les lignes impaires n'ont pas leur propre
-  // fond (juste la ligne paire ci-dessous), sans cette card() elles se
-  // retrouveraient directement sur le fond blanc de la page.
-  card(13,13,W-26,10+hPlayers.length*7);
+  let ty=15;
+  grn();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("FENIX",tableX,ty+3);
+  ty=drawPlayerTable(tableX,ty+6,hPlayers)+8;
+  if(aPlayers.length>0){
+    red();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("ADVERSAIRE",tableX,ty+3);
+    ty=drawPlayerTable(tableX,ty+6,aPlayers)+8;
+  }
 
-  // Header
-  sky();doc.setFontSize(7);doc.setFont("helvetica","bold");
-  let cx=15;
-  cols.forEach((c_,i)=>{
-    if(i<=2)doc.text(c_,cx+2,ty);else doc.text(c_,cx+colW[i]/2,ty,{align:"center"});
-    cx+=colW[i];
-  });
-  doc.setDrawColor(123,167,194);doc.setLineWidth(0.3);doc.line(15,ty+1.5,15+colW.reduce((a,b)=>a+b,0),ty+1.5);
-  ty+=6;
-
-  hPlayers.forEach((p,ri)=>{
-    if(ri%2===0){doc.setFillColor(36,51,82);doc.rect(14,ty-3,colW.reduce((a,b)=>a+b,0)+2,7,"F");}
-    cx=15;
-    const eff=p.tirs>0?Math.round(p.goals/p.tirs*100)+"%":"-";
-    const row=[p.num,p.name,p.position||"?",String(p.goals),String(p.pd),String(p.tirs),eff,String(p.pb),String(p.excl)];
-    
-    row.forEach((v,i)=>{
-      if(i===0){t2();doc.setFontSize(8);doc.setFont("helvetica","bold");}
-      else if(i===1){wh();doc.setFontSize(8);doc.setFont("helvetica","bold");}
-      else if(i===3){grn();doc.setFontSize(9);doc.setFont("helvetica","bold");}
-      else if(i===4){doc.setTextColor(240,199,94);doc.setFontSize(8);doc.setFont("helvetica","bold");}
-      else if(i===6){
-        const ev=parseInt(v);
-        if(!isNaN(ev)){if(ev>=70)grn();else if(ev>=50)doc.setTextColor(240,199,94);else red();}else t3();
-        doc.setFontSize(8);doc.setFont("helvetica","bold");
-      }
-      else if(i>=7){
-        if(v!=="0")red();else t3();
-        doc.setFontSize(8);doc.setFont("helvetica","normal");
-      }
-      else{t2();doc.setFontSize(8);doc.setFont("helvetica","normal");}
-      
-      if(i<=2)doc.text(String(v),cx+2,ty);else doc.text(String(v),cx+colW[i]/2,ty,{align:"center"});
-      cx+=colW[i];
-    });
-    ty+=7;
-  });
-  
   // Score evolution
-  ty+=6;
   card(15,ty,W-30,55);
   sky();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("EVOLUTION DU SCORE",20,ty+7);
   
