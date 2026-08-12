@@ -9,7 +9,7 @@ Responsable : Romain, responsable du centre de formation (CF).
 - **4 fichiers séparés** — index.html (shell), style.css, app.js, config.js (identifiants Supabase, isolé pour permettre un clonage futur par un autre coach)
 - **Vanilla JS** — pas de framework (React, Vue, etc.)
 - **IndexedDB** pour le stockage local des matchs ET la file d'attente de synchronisation (outbox, voir section Stockage des données)
-- **PWA** avec `sw.js` (service worker v70) et `manifest.json` pour le mode hors-ligne
+- **PWA** avec `sw.js` (service worker v84) et `manifest.json` pour le mode hors-ligne
 - **Hébergé en double, en transition** :
   - Netlify (historique) : fenix-statscf.netlify.app
   - GitHub Pages (nouveau) : romainternel.github.io/stat-terrain/ — dépôt `romainternel/stat-terrain` (renommé depuis `appli-terrain`), **public** (nécessaire pour GitHub Pages gratuit)
@@ -20,10 +20,10 @@ Responsable : Romain, responsable du centre de formation (CF).
 ```
 fenix/
 ├── index.html      ← shell HTML (~20 lignes)
-├── style.css       ← tout le CSS (~544 lignes)
-├── app.js          ← toute la logique JS (~4341 lignes)
+├── style.css       ← tout le CSS (~784 lignes)
+├── app.js          ← toute la logique JS (~4900 lignes)
 ├── config.js       ← identifiants Supabase (SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_AUTH_EMAIL), jamais la clé service_role
-├── sw.js           ← service worker (cache v70 : index + style + app + config, chemins relatifs "./" pour fonctionner en sous-dossier)
+├── sw.js           ← service worker (cache v84 : index + style + app + config, chemins relatifs "./" pour fonctionner en sous-dossier)
 ├── manifest.json   ← config PWA (start_url/scope en "./", relatifs)
 └── .nojekyll       ← nécessaire pour GitHub Pages (sert les fichiers tels quels, sans traitement Jekyll)
 ```
@@ -48,10 +48,10 @@ fenix/
 
 ### Match (prise de stats en direct) — mode Expert
 - **Scoreboard** avec timer, score, sélecteur de GB pour chaque équipe
-- **Barre d'actions** : But, Tir arrêté, Tir non cadré, PB, PO, PEN, Jet franc, 2min, Carton R, TM
+- **Barre d'actions** : But, Tir arrêté, Tir non cadré, PB, PO, Jet franc (2min/Carton R vivent dans le bloc sanctions `.ml-left`, TM dans le timer — pas dans cette barre ; l'ancien type `ACTIONS.PEN` autonome existe encore dans le code mais n'est relié à aucun bouton, `S.penResultSelect` explicitement marqué `// kept for compat (unused)`)
 - **Workflow d'action** : sélectionne action → clique joueur sur le terrain (équipe déterminée par le toggle POSSESSION) → terrain impact (localisation) + zone de but (9 zones) → auto-validation. Pas d'étape "clique équipe" séparée.
 - **PB, PO, Jet franc** : auto-validation immédiate dès le clic sur le joueur — pas de terrain d'impact ni de zone de but pour ces 3 actions (`x`/`y` restent `null`).
-- **PO (PEN_OBT) active un mode pénalty** (`S.penMode`) : le clic joueur suivant sur BUT/Tir arrêté/Tir non cadré se convertit automatiquement en PEN_GOAL/PEN_SAVE/PEN_OFF (position fixe, validation immédiate). Pas de popup à 3 choix.
+- **PO (PEN_OBT) active un mode pénalty** (`S.penMode`, STORY-32/33/34) : encart dédié directement sur le terrain (pas de popup) — tireur pré-désigné (réassignable en un tap), 3 boutons BUT/ARRÊT/HORS CADRE. Si le suivi GB (`S.trackGK`) est actif et l'issue est BUT ou ARRÊT, une étape de zone d'impact (9 zones) s'affiche avant validation — capturée réellement pour la première fois (jamais enregistrée avant STORY-32). Barre d'actions et sélecteur d'équipe verrouillés tant que l'encart est ouvert.
 - **PD (passe décisive)** : bouton dédié **"🎯 PD"** qui apparaît après un but, ouvre un sélecteur de joueur sur le terrain pour assigner l'assist rétroactivement au dernier événement — ce n'est pas un 2e clic pendant la saisie du tir (un 2e clic joueur à ce moment-là remplace le tireur).
 - **Auto-validation** : quand on sélectionne une nouvelle action, l'action en cours est validée automatiquement
 - **Bouton ✓ VALIDER** : gros bouton vert à droite du terrain d'impact
@@ -73,15 +73,17 @@ fenix/
 - Filtres MT1/MT2
 
 ### Stats (onglets)
-- **📊 Comparaison** : barres comparatives côte à côte + évolution du score avec TM
+- **📊 Comparaison** : barres comparatives, légende affichée des deux côtés de chaque ligne — `Buts/Tirs, Pen, Efficacité, Arrêts GB, Non cadrés, PB, Jet franc, 2 min, Carton R, Possessions` dans cet ordre (PD/PO volontairement retirés de ce tableau) + évolution du score avec TM. Même tableau, homogénéisé avec Bilan → Match.
 - **🧤 Gardiens** : stats GB, zones d'impact 3×3, terrain avec localisation des tirs, filtres par GB et type
 - **👤 Joueurs** : tableau avec buts, PD, tirs, efficacité, PB, 2min
 - **🧠 Analyse** : auto-détection de patterns + notes coach + export texte pour Claude
-- **📄 PDF** : génération de rapport 3 pages (comparatif, joueurs, gardiens)
+- **📄 PDF** : rapport multi-pages (comparatif+joueurs, cartes de tirs des joueurs FENIX ayant tiré [page conditionnelle], gardiens) — pagination "Page X/N" calculée dynamiquement. Page joueurs : tout l'effectif FENIX sélectionné, pas seulement ceux ayant un événement individuel.
 - **Bouton ⛶ plein écran** sur chaque carte de stats
 
 ### Bilan
-- **Match review** : résumé comparatif d'un match sauvegardé
+- **Match** : résumé comparatif d'un match archivé — même tableau homogénéisé que Stats → Comparaison
+- **Analyse** (STORY-35) : auto-analyse + notes coach éditables et réellement persistées pour n'importe quel match archivé, isolé du match en cours
+- **PDF** (STORY-36) : raccourci pour charger un match archivé et générer directement son PDF, protégé par un correctif de sécurité P0 (coupe la souscription Realtime avant tout reset)
 - **Saison** : agrégation de tous les matchs (victoires, nuls, défaites, stats moyennes, top joueurs, GB)
 
 ### Gestion d'équipes
@@ -163,6 +165,7 @@ TM:       { needsMap:false, isTM:true }
 - IndexedDB via fonctions `dbSaveMatch()`, `dbGetAll()`, `dbDelete()`
 - Client Supabase nommé `sbClient` (pas `supabase`) pour ne pas entrer en conflit avec le namespace global de la librairie CDN
 - Toute fonction/handler d'écriture (saisie, chrono, undo, réglages destructifs) commence par `if(S.readOnly) return;` — convention à respecter pour tout nouveau point d'écriture ajouté à l'avenir
+- Pour tout total agrégé au niveau équipe (buts/tirs/efficacité), filtrer par les flags `isGoal`/`isSave`/`isOff` (inclut automatiquement les variantes pénalty), jamais par correspondance exacte de `type` via `teamStat(team,"GOAL")` — cette dernière approche a causé le bug STORY-37. `teamScore()`/`teamStat()` eux-mêmes restent inchangés (9 call sites partagés, dont l'écran Match en direct).
 
 ## Déploiement
 1. Modifier `style.css` et/ou `app.js`
@@ -209,6 +212,15 @@ TM:       { needsMap:false, isTM:true }
 - **STORY-16** — Audit de clarté d'interface pour un aidant occasionnel : critères déjà satisfaits par le code existant (icône+label toujours ensemble sur les boutons d'action, bouton "↩ Annuler" aussi visible que les actions principales) — aucun changement de code nécessaire, confirmé par test réel CDP. Le Mode Simple (STORY-23/24) répond en pratique mieux encore au besoin initial de cette story.
 - **STORY-17** — Documentation de clonage pour un autre coach (voir section "Cloner ce projet" ci-dessous)
 - **STORY-27** — Suppression réelle d'un match sur Supabase (`matches` + `match_events`) quand il est supprimé de l'historique local — QA PASSED, Security Auditor feu vert, Regression Guardian RAS (36/36). Limite acceptée : ne s'applique qu'aux matchs sauvegardés après cette story (ceux d'avant n'ont pas l'identifiant Supabase nécessaire pour être nettoyés a posteriori)
+- **STORY-28** — Abandonner un match "reprenable" indésirable (bouton 🗑, marque `finished` côté Supabase)
+- **STORY-29** — Audit de lisibilité (Designer) : panneau Réglages réorganisé en 3 groupes, scroll de la barre d'actions plus visible sur iPhone
+- **STORY-30** — Fusion carte Gardien (chiffres + terrain) en une "feuille" par équipe — QA PASSED
+- **STORY-31** — Hors-cycle : plus de zone de but demandée pour un tir non cadré ; légende ajoutée sur la heatmap gardien
+- **STORY-32/33/34** — Refonte pénalty en encart (voir Match ci-dessus) + gardes de robustesse + protection heatmap Gardiens — Code Review (1 rejet puis approuvé), QA PASSED AVEC RÉSERVES, Regression Guardian RAS (v79)
+- **STORY-35/36** — Analyse/notes coach + raccourci PDF depuis Bilan (voir Bilan ci-dessus) + correctif sécurité P0 — Security Auditor convoqué (rien de critique), QA PASSED AVEC RÉSERVES, Regression Guardian RAS (v79)
+- **STORY-37** — Efficacité de tir pouvant dépasser 100% sur pénalty (trouvé par QA pendant 32-36). Corrigé hors cycle formel (demande directe de Romain), 4 endroits alignés sur le calcul par flags — vérifié par test direct (CDP), pas de rapport QA/Regression Guardian dédié
+- **Corrections hors-cycle (session du 11-12/08)** : terrain PDF corrigé (échelle, orientation, géométrie handball réelle, palette) ; marqueurs de tir réduits ; tableau Comparatif homogénéisé Stats/Bilan ; chevauchement nom équipe/bouton plein écran corrigé ; PDF page Joueurs étendue à tout l'effectif + nouvelle page "Cartes de tirs" par joueur
+- **Point d'attention (non résolu)** : `renderMiniCompare()` et `renderGkBar()` se sont révélés être du code mort (définis, jamais appelés) — ni supprimés ni réactivés, à vérifier avant de supposer qu'ils s'affichent quelque part
 - Corrections hors-cycle : validation d'ajout de joueur adverse assouplie (nom OU numéro suffit, plus seulement numéro) ; import CSV ignorant désormais la ligne d'en-tête (évitait un joueur fantôme "Nom"/DC au ré-import) ; synchronisation temps réel du chrono/mi-temps (nécessitait un abonnement realtime séparé sur la table `matches`, en plus de celui sur `match_events`)
 
 ## Cloner ce projet pour un autre coach/équipe (STORY-17)
@@ -227,3 +239,4 @@ Décision actée : **un projet Supabase = un déploiement = un coach** (voir aus
 
 - **Tout le backlog cadré lors du chantier Supabase (STORY-10 à 17) est maintenant livré et validé en conditions réelles** (2026-08-03) : synchronisation multi-appareil, mode lecteur, indicateur de sync, audit de clarté d'interface, doc de clonage. Plus aucune story ouverte dans ce cycle.
 - **Migration d'hébergement en cours** : dépôt GitHub renommé `stat-terrain` et rendu **public** pour permettre GitHub Pages (nécessaire côté offre gratuite). Netlify gardé en parallèle jusqu'à validation réelle. Les captures d'écran de vérification technique (`docs/design/screenshots/`) ont été retirées de l'état courant du dépôt (elles montraient l'ancien roster par défaut avec de vrais prénoms) — l'historique Git antérieur les contient encore, pas de réécriture d'historique effectuée.
+- **Efficacité de tir (STORY-37)** : décidé d'inclure les pénaltys dans le calcul partout, plutôt que de les exclure (deuxième option envisagée) — actée et implémentée cette session, sur demande explicite de Romain.
