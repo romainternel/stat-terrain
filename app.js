@@ -4485,6 +4485,18 @@ function generatePDF(){
     sky();doc.setFontSize(11);doc.setFont("helvetica","bold");doc.text(title,15,8);
     t2();doc.setFontSize(7);doc.setFont("helvetica","normal");doc.text(subtitle,W-15,8,{align:"right"});
   }
+  // Garde de débordement : si le bloc à venir (hauteur neededHeight) ne tient pas
+  // dans l'espace restant avant le pied de page, ouvre une nouvelle page et
+  // redessine l'en-tête — à appeler AVANT le titre de section, pas seulement
+  // avant son contenu, pour ne jamais laisser un titre orphelin sur l'ancienne
+  // page pendant que son contenu part sur la suivante.
+  function ensurePageSpace(y, neededHeight, title, subtitle){
+    if(y + neededHeight > H - 15){
+      doc.addPage(); bg(); pageHeader(title, subtitle);
+      return 18;
+    }
+    return y;
+  }
   function sky(){doc.setTextColor(123,167,194);}
   function grn(){doc.setTextColor(80,200,120);}
   function red(){doc.setTextColor(232,70,90);}
@@ -4549,7 +4561,7 @@ function generatePDF(){
     });
     t3();doc.setFontSize(6);doc.text(label,cx+cw/2,cy+ch+4,{align:"center"});
   }
-  function drawGoalZone(gx,gy,gw,gh,gkId,label){
+  function drawGoalZone(gx,gy,gw,gh,gkId){
     const zones=["HG","HC","HD","MG","MC","MD","BG","BC","BD"];
     const data={};
     zones.forEach(z=>{data[z]={saves:0,goals:0};});
@@ -4564,18 +4576,21 @@ function generatePDF(){
       const x=gx+col*cellW, y=gy+row*cellH;
       const s=data[z].saves, g=data[z].goals, tot=s+g;
       if(tot>0){
-        const pct=s/tot;
-        if(pct>0.5){doc.setFillColor(80,200,120);}else{doc.setFillColor(232,70,90);}
-        // opacity handled by color mixing
+        // Perspective tireur, comme goalZoneHeatmap() côté app (jamais "arrêts/
+        // total" côté gardien) : vert si plus de la moitié des tirs de la zone
+        // sont des buts, cyan sinon — jamais rouge, pour rester cohérent avec
+        // l'app (le PDF affichait avant un ratio et une couleur inversés).
+        if(g/tot>0.5){doc.setFillColor(80,200,120);}else{doc.setFillColor(78,205,232);}
       } else {
-        doc.setFillColor(36,51,82);
+        doc.setFillColor(28,43,64);
       }
       doc.rect(x,y,cellW-0.5,cellH-0.5,"F");
       if(tot>0){
         wh();doc.setFontSize(7);doc.setFont("helvetica","bold");
-        doc.text(`${s}/${tot}`,x+cellW/2-0.25,y+cellH/2+1,{align:"center"});
+        doc.text(`${g}/${tot}`,x+cellW/2-0.25,y+cellH/2+1,{align:"center"});
       }
-      t3();doc.setFontSize(4);doc.text(z,x+cellW/2-0.25,y+cellH-1.5,{align:"center"});
+      // Lettres de zone (HG/HC...) retirées — redondantes avec la position dans
+      // la grille 3×3 (retour Romain).
     });
     // Goal bar at bottom
     doc.setFillColor(123,167,194);doc.rect(gx,gy+gh,gw-0.5,1,"F");
@@ -4592,7 +4607,7 @@ function generatePDF(){
       const col=i%3, row=Math.floor(i/3);
       const x=gx+col*cellW, y=gy+row*cellH;
       const d=data[z];
-      if(d.t>0){ doc.setFillColor(...(d.g/d.t>0.5?[80,200,120]:[232,70,90])); }
+      if(d.t>0){ doc.setFillColor(...(d.g/d.t>0.5?[80,200,120]:[78,205,232])); } // cyan, cohérent avec drawGoalZone()/l'app
       else doc.setFillColor(36,51,82);
       doc.rect(x,y,cellW-0.3,cellH-0.3,"F");
       if(d.t>0){
@@ -4690,16 +4705,17 @@ function generatePDF(){
     const cw=(W-35)/2;
     // Classement mixte joueurs de champ + gardien : un but pèse un peu plus qu'une
     // PD (score=buts*3+pd), un gardien n'entre en lice que sur grosse perf (≥40%
-    // d'arrêts sur au moins 6 arrêts) avec un poids comparable (score=arrêts*3) —
-    // sinon il ne ressortirait jamais face à des buteurs.
+    // d'arrêts sur tirs CADRÉS, au moins 6 arrêts — gkS.total/gkS.saves, pas
+    // totalAll qui inclut le hors-cadre) avec un poids comparable (score=arrêts*3)
+    // — sinon il ne ressortirait jamais face à des buteurs.
     const gkId=S[side].gkId;
     const gk=gkId?S[side].players.find(p=>p.id===gkId):null;
     const gkS=gkId?gkStats(gkId):null;
-    const gkQualifies=gk&&gkS&&gkS.totalAll>0&&gkS.saves>=6&&(gkS.saves/gkS.totalAll)>=0.4;
+    const gkQualifies=gk&&gkS&&gkS.total>0&&gkS.saves>=6&&(gkS.saves/gkS.total)>=0.4;
     const sp=Object.values(playerStats).filter(p=>p.team===side)
       .map(p=>({...p, kind:"player", score:p.goals*3+p.pd}));
     if(gkQualifies) sp.push({kind:"gk", name:gk.name, num:gk.number,
-      saves:gkS.saves, totalAll:gkS.totalAll, pct:Math.round(gkS.saves/gkS.totalAll*100), score:gkS.saves*3});
+      saves:gkS.saves, total:gkS.total, pct:Math.round(gkS.saves/gkS.total*100), score:gkS.saves*3});
     const top3=sp.sort((a,b)=>b.score-a.score).slice(0,3);
 
     const cardH=12+top3.length*8;
@@ -4710,12 +4726,14 @@ function generatePDF(){
 
     let ry=sy+15;
     top3.forEach((p,i)=>{
-      const rank=i===0?"★":(i+1)+".";
+      // Texte ASCII uniquement — les fonts standard jsPDF (Helvetica/WinAnsi) ne
+      // supportent pas "★" (rendu "&" à l'impression, bug rapporté).
+      const rank=(i+1)+".";
       wh();doc.setFontSize(8);doc.setFont("helvetica","bold");
       doc.text(`${rank} #${p.num} ${p.name}`,x+4,ry);
       t2();doc.setFontSize(7);doc.setFont("helvetica","normal");
       const line=p.kind==="gk"
-        ? `GB ${p.saves}/${p.totalAll} arrets (${p.pct}%)`
+        ? `GB ${p.saves}/${p.total} arrets (${p.pct}%)`
         : `${p.goals}/${p.tirs}T (${p.tirs>0?Math.round(p.goals/p.tirs*100):0}%) - ${p.pd}PD - ${p.pb}PB`;
       doc.text(line,x+cw-4,ry,{align:"right"});
       ry+=8;
@@ -4768,8 +4786,9 @@ function generatePDF(){
     return y+10+players.length*7;
   }
 
+  const joueursSubtitle=`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`;
   doc.addPage();bg();
-  pageHeader("JOUEURS",`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`);
+  pageHeader("JOUEURS",joueursSubtitle);
 
   const tableX=15+(W-30-130)/2;
 
@@ -4786,17 +4805,24 @@ function generatePDF(){
   }).sort((a,b)=>b.goals-a.goals);
 
   let ty=15;
+  ty=ensurePageSpace(ty, 20+hPlayers.length*7, "JOUEURS", joueursSubtitle);
   grn();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("FENIX",tableX,ty+3);
   ty=drawPlayerTable(tableX,ty+6,hPlayers)+8;
   if(aPlayers.length>0){
+    ty=ensurePageSpace(ty, 20+aPlayers.length*7, "JOUEURS (suite)", joueursSubtitle);
     red();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("ADVERSAIRE",tableX,ty+3);
     ty=drawPlayerTable(tableX,ty+6,aPlayers)+8;
   }
 
-  // Score evolution
+  // Évolution du score — sur sa propre page (STORY-39) : ne dépend plus de la
+  // hauteur des tableaux Joueurs ci-dessus, qui varie avec la taille des deux
+  // effectifs et pouvait la repousser hors de la page.
+  doc.addPage();bg();
+  pageHeader("EVOLUTION DU SCORE",joueursSubtitle);
+  ty=18;
   card(15,ty,W-30,55);
   sky();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("EVOLUTION DU SCORE",20,ty+7);
-  
+
   const gx=25,gy_=ty+48,gw_=W-50,gh_=34;
   const goalEvts=[...S.events].reverse().filter(e=>ACTIONS[e.type]?.isGoal);
   let hR=0,aR=0;
@@ -4860,38 +4886,60 @@ function generatePDF(){
   // Un mini-terrain par joueur ayant au moins un tir enregistré (but/arrêt/non
   // cadré), avec sa zone d'impact si la saisie expert (S.trackGK) l'a capturée,
   // et son nombre de pertes de balle — même géométrie/orientation/couleurs que
-  // le terrain gardiens.
-  const shotPlayers=S.home.players.filter(p=>p.selected).map(p=>{
-    const shots=S.events.filter(e=>e.team==="home"&&e.playerId===p.id&&e.x!=null&&
-      (ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff))
-      .map(e=>({x:e.x,y:e.y,goal:!!ACTIONS[e.type]?.isGoal,zone:e.goalZone||null}));
-    const pb=S.events.filter(e=>e.team==="home"&&e.playerId===p.id&&e.type==="TURNOVER").length;
-    return {player:p, shots, pb};
-  }).filter(ps=>ps.shots.length>0);
-
-  if(shotPlayers.length>0){
-    doc.addPage();bg();
-    pageHeader("CARTE TIR JOUEUR",`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`);
-
-    const gridCols=2, gap=6, cellW=(W-30-(gridCols-1)*gap)/gridCols, cellH=46;
-    const courtW=cellW*0.58, courtH=28, zoneX=courtW+8, zoneW=cellW-zoneX-3, zoneH=20;
-    let gpx=15, gpy=18, gcol=0;
-    shotPlayers.forEach(ps=>{
-      if(gpy+cellH>H-10){ doc.addPage();bg(); gpy=18; }
+  // le terrain gardiens. Fonction partagée FENIX/ADVERSAIRE (STORY-39), sur le
+  // modèle de drawPlayerTable() ci-dessus.
+  function collectShotPlayers(teamKey){
+    return S[teamKey].players.filter(p=>p.selected).map(p=>{
+      const shots=S.events.filter(e=>e.team===teamKey&&e.playerId===p.id&&e.x!=null&&
+        (ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff))
+        .map(e=>({x:e.x,y:e.y,goal:!!ACTIONS[e.type]?.isGoal,zone:e.goalZone||null}));
+      const pb=S.events.filter(e=>e.team===teamKey&&e.playerId===p.id&&e.type==="TURNOVER").length;
+      return {player:p, shots, pb};
+    }).filter(ps=>ps.shots.length>0);
+  }
+  const scGridCols=2, scGap=6, scCellW=(W-30-(scGridCols-1)*scGap)/scGridCols, scCellH=46;
+  const scCourtW=scCellW*0.58, scCourtH=28, scZoneX=scCourtW+8, scZoneW=scCellW-scZoneX-3, scZoneH=20;
+  function drawShotCardsSection(y, pageTitle, subtitle, players){
+    let gpx=15, gpy=y, gcol=0;
+    players.forEach((ps,idx)=>{
+      if(gpy+scCellH>H-10){ doc.addPage();bg(); pageHeader(pageTitle,subtitle); gpx=15; gpy=18; gcol=0; }
+      // Dernière carte d'une grille à nombre impair : centrée plutôt que collée
+      // à gauche (visible aussi pour une section à un seul joueur).
+      const isLastAlone = idx===players.length-1 && gcol===0;
+      const cardX = isLastAlone ? 15+(W-30-scCellW)/2 : gpx;
       const p=ps.player, g=ps.shots.filter(s=>s.goal).length, tt=ps.shots.length;
-      card(gpx,gpy,cellW,cellH-3);
+      card(cardX,gpy,scCellW,scCellH-3);
       wh();doc.setFontSize(8);doc.setFont("helvetica","bold");
-      doc.text(`#${p.number||"-"} ${p.name}`,gpx+3,gpy+6);
+      doc.text(`#${p.number||"-"} ${p.name}`,cardX+3,gpy+6);
       t2();doc.setFontSize(6);doc.setFont("helvetica","normal");
-      doc.text(`${g}B ${tt}T (${tt>0?Math.round(g/tt*100):0}%) - ${ps.pb}PB`,gpx+cellW-3,gpy+6,{align:"right"});
-      drawCourt(gpx+3,gpy+9,courtW,courtH,ps.shots,"");
+      doc.text(`${g}B ${tt}T (${tt>0?Math.round(g/tt*100):0}%) - ${ps.pb}PB`,cardX+scCellW-3,gpy+6,{align:"right"});
+      drawCourt(cardX+3,gpy+9,scCourtW,scCourtH,ps.shots,"");
       if(ps.shots.some(s=>s.zone)){
-        t3();doc.setFontSize(5);doc.text("Impact",gpx+zoneX,gpy+9);
-        drawPlayerZoneGrid(gpx+zoneX,gpy+11,zoneW,zoneH,ps.shots);
+        t3();doc.setFontSize(5);doc.text("Impact",cardX+scZoneX,gpy+9);
+        drawPlayerZoneGrid(cardX+scZoneX,gpy+11,scZoneW,scZoneH,ps.shots);
       }
       gcol++;
-      if(gcol>=gridCols){ gcol=0; gpx=15; gpy+=cellH; } else { gpx+=cellW+gap; }
+      if(gcol>=scGridCols){ gcol=0; gpx=15; gpy+=scCellH; } else { gpx+=scCellW+scGap; }
     });
+    return gpy + (gcol>0 ? scCellH : 0);
+  }
+
+  const homeShotPlayers=collectShotPlayers("home");
+  const awayShotPlayers=collectShotPlayers("away");
+  if(homeShotPlayers.length>0 || awayShotPlayers.length>0){
+    const shotSubtitle=`${S.home.name} ${hScore} - ${aScore} ${S.away.name}  |  ${S.journee}`;
+    doc.addPage();bg();
+    pageHeader("CARTE TIR JOUEUR",shotSubtitle);
+    let scy=18;
+    if(homeShotPlayers.length>0){
+      grn();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("FENIX",15,scy+3);
+      scy=drawShotCardsSection(scy+6,"CARTE TIR JOUEUR (suite)",shotSubtitle,homeShotPlayers)+8;
+    }
+    if(awayShotPlayers.length>0){
+      scy=ensurePageSpace(scy, 12, "CARTE TIR JOUEUR (suite)", shotSubtitle);
+      red();doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("ADVERSAIRE",15,scy+3);
+      scy=drawShotCardsSection(scy+6,"CARTE TIR JOUEUR (suite)",shotSubtitle,awayShotPlayers)+8;
+    }
   }
 
   // ═══ PAGE 3 - GARDIENS ═══
@@ -4930,7 +4978,10 @@ function generatePDF(){
     card(g.x,58,halfW,30);
     doc.setTextColor(...g.color);doc.setFontSize(8);doc.setFont("helvetica","bold");
     doc.text("ZONES D'IMPACT",g.x+4,64);
-    drawGoalZone(g.x+(halfW-50)/2,66,50,18,g.gkId,"");
+    t3();doc.setFontSize(4);doc.setFont("helvetica","italic");
+    doc.text("Stat des tireurs (ex : 1/1 = 1 but, pas d'arret)",g.x+4,67);
+    doc.setFont("helvetica","normal");
+    drawGoalZone(g.x+(halfW-50)/2,69,50,16,g.gkId);
     
     // Court with shots
     card(g.x,91,halfW,55);
