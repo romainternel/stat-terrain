@@ -10,7 +10,7 @@ const POS_XY={
   GB:  {x:50, y:10},                            // empilés verticalement (spread par défaut), près de la ligne de but
   ALG: {x:0,  y:11, anchor:"left"},             // coin haut-gauche, bord aligné sur la ligne de touche
   ALD: {x:100,y:11, anchor:"right"},            // coin haut-droit, miroir
-  PVT: {x:50, y:59, spread:"h", hSpread:26},    // point de penalty (7m), groupés ensemble au centre
+  PVT: {x:50, y:59, spread:"grid", hSpread:26, vSpread:13}, // point de penalty (7m) — triangle à 3, carré à 4 (cf. courtPlayerPositions)
   ARG: {x:0,  y:76, anchor:"left"},             // 9m, bord aligné sur la ligne de touche gauche
   ARD: {x:100,y:76, anchor:"right"},            // 9m, miroir
   DC:  {x:50, y:88},                            // centré, en retrait derrière l'alignement ARG/ARD
@@ -2281,14 +2281,41 @@ function courtPlayerPositions(roster){
     if(players.length===1){
       result.push({...players[0], cx:base.x, cy:base.y, anchor});
     } else if(base.spread==="h"){
-      // Spread horizontally (PVT — groupés ensemble, centrés). hSpread réglable
-      // par position (POS_XY) car des noms longs sur 2 joueurs se chevauchaient
-      // avec l'écart par défaut, trop juste pour la largeur réelle des encarts.
+      // Spread horizontally. hSpread réglable par position (POS_XY) car des noms
+      // longs sur 2 joueurs se chevauchaient avec l'écart par défaut, trop juste
+      // pour la largeur réelle des encarts.
       const hSpread=base.hSpread||Math.min(16, 70/players.length);
       players.forEach((p,i)=>{
         const offset=(i-(players.length-1)/2)*hSpread;
         result.push({...p, cx:Math.max(6,Math.min(94,base.x+offset)), cy:base.y, anchor});
       });
+    } else if(base.spread==="grid"){
+      // Disposition en grille autour de base.x/base.y — triangle à 3 (un joueur
+      // devant, centré, deux derrière), carré à 4 (deux de chaque côté). Sert
+      // PVT (STORY-38) mais réutilisable par tout poste qui recevrait un jour un
+      // effectif similaire. 5+ : pas de disposition dédiée, juste une grille
+      // générique à 2 colonnes qui garantit l'absence de chevauchement total.
+      const hStep=base.hSpread||26, vStep=base.vSpread||13;
+      const layouts={
+        2:[{dx:-hStep/2,dy:0},{dx:hStep/2,dy:0}],
+        3:[{dx:0,dy:-vStep/2},{dx:-hStep/2,dy:vStep/2},{dx:hStep/2,dy:vStep/2}],
+        4:[{dx:-hStep/2,dy:-vStep/2},{dx:hStep/2,dy:-vStep/2},{dx:-hStep/2,dy:vStep/2},{dx:hStep/2,dy:vStep/2}],
+      };
+      const layout=layouts[players.length];
+      if(layout){
+        players.forEach((p,i)=>result.push({...p,
+          cx:Math.max(6,Math.min(94,base.x+layout[i].dx)),
+          cy:Math.max(4,Math.min(96,base.y+layout[i].dy)), anchor}));
+      } else {
+        const perRow=2, rowCount=Math.ceil(players.length/perRow);
+        players.forEach((p,i)=>{
+          const row=Math.floor(i/perRow), col=i%perRow;
+          const colsInRow=Math.min(perRow, players.length-row*perRow);
+          result.push({...p,
+            cx:Math.max(6,Math.min(94,base.x+(col-(colsInRow-1)/2)*hStep)),
+            cy:Math.max(4,Math.min(96,base.y+(row-(rowCount-1)/2)*vStep)), anchor});
+        });
+      }
     } else {
       // Spread vertically (GB, ARG, DC, ARD, etc.) — cx reste sur la ligne de touche
       // pour les positions ancrées (ARG/ARD), seule la profondeur (cy) varie.
