@@ -353,6 +353,14 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .gk-filter-select{ background:var(--bg3); border-radius:var(--r1); font-size:12px; font-weight:600;
   padding:5px 8px; min-height:30px; max-width:148px; }
 @media(max-width:700px){ .gk-filter-select{ max-width:130px; } }
+
+/* ── Bascule points/zones (STORY-43) — reglage global, meme famille visuelle que .st-tab ── */
+.shotview-toggle{ display:inline-flex; gap:2px; background:var(--card); border:1px solid var(--border);
+  border-radius:8px; padding:2px; flex-shrink:0; }
+.shotview-btn{ padding:5px 9px; border-radius:6px; background:transparent; border:none;
+  font-size:14px; cursor:pointer; transition:all .15s; line-height:1; }
+.shotview-btn:active{ transform:scale(.92); }
+.shotview-btn.on{ background:rgba(123,167,194,.16); }
 .gk-pill-group{ display:flex; flex-direction:column; gap:6px; align-items:center; }
 @media(max-width:700px){ .gk-pill-group{ flex-direction:row; gap:10px; } }
 .gk-pill{ display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:999px;

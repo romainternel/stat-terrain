@@ -108,6 +108,10 @@ try {
   S.mode = (savedMode==="simple"||savedMode==="expert") ? savedMode : (window.innerWidth<700 ? "simple" : "expert");
 } catch(e){}
 try { S.readOnly = localStorage.getItem("hb2_readonly")==="1"; } catch(e){}
+// Preference d'affichage par appareil (comme S.mode), PAS une donnee de match
+// — ne doit jamais etre reinitialisee par newMatch()/chargement de match
+// (contrairement a S.gkFilter qui, lui, est scope a un match).
+try { S.shotViewMode = localStorage.getItem("hb2_shotview")==="zones" ? "zones" : "points"; } catch(e){ S.shotViewMode="points"; }
 
 function setReadOnly(val){
   S.readOnly=val;
@@ -124,6 +128,13 @@ function setReadOnly(val){
   R();
 }
 
+// Pure preference d'affichage (pas de donnee de match a proteger) — reste
+// actif meme en mode lecteur, contrairement aux actions qui ecrivent S.events.
+function setShotViewMode(mode){
+  S.shotViewMode=mode;
+  try{ localStorage.setItem("hb2_shotview", mode); }catch(e){}
+  R();
+}
 function saveTeams(){ localStorage.setItem("hb2_teams",JSON.stringify({home:S.home,away:S.away})); }
 function saveMatches(){ localStorage.setItem("hb2_matches",JSON.stringify(S.savedMatches)); }
 function setMode(newMode){
@@ -2248,6 +2259,127 @@ function courtSvgMarkup(){
   `;
 }
 
+// ═══ Zones de tir sur le terrain (bascule points/zones, STORY-43) ═══
+// Modele valide par Romain via un prototype visuel reel (8 iterations) avant
+// tout code applicatif — cf. docs/arch/zones-terrain-et-tableau-joueurs.md.
+// Classe un tir (x/y en %, meme repere que S.events[].x/.y) en zone de
+// depart sur le terrain. N'utilise le rayon 6m (R6) nulle part : le disque
+// des 6m est trop proche des poteaux pour qu'un point de touche y tombe
+// (poteau->touche = 148.75 > 105), donc la vraie frontiere de zone est R9
+// partout ; la ligne des 6m (deja tracee par courtSvgMarkup()) reste un pur
+// repere visuel, pas une frontiere.
+function shotZoneCourt(xPct, yPct){
+  const X=xPct/100*350, Y=yPct/100*208;
+  const postL=148.75, postR=201.25, R9=157.5;
+  const AY=56, AX=88; // portee des ailes, calibree sur le prototype valide
+  const centerHalfW=postR-postL, splitL=175-centerHalfW, splitR=175+centerHalfW;
+  if(Y<=0) return X<AX?"AILG":(X>350-AX?"AILD":"6MC");
+  if(X<AX && Y < AY*(1-X/AX)) return "AILG";
+  if(X>350-AX && Y < AY*(1-(350-X)/AX)) return "AILD";
+  if(X>=splitL && X<=splitR){
+    let boundary;
+    if(X>=postL && X<=postR) boundary=R9;
+    else { const post=X<postL?postL:postR, dx=Math.abs(X-post); boundary=Math.sqrt(Math.max(0,R9*R9-dx*dx)); }
+    return Y<boundary ? "6MC" : "9MC";
+  }
+  const post=X<splitL?postL:postR, dir=X<splitL?-1:1;
+  const dx=Math.abs(X-post), r=Math.hypot(dx,Y);
+  if(r<R9) return dir<0?"6MG":"6MD";
+  return dir<0?"9MG":"9MD";
+}
+const COURT_ZONE_ORDER=["AILG","6MG","6MC","6MD","AILD","9MG","9MC","9MD"];
+// Positions de texte pre-calculees par zone en % (pas le centroide brut, qui
+// tombe mal sur les zones en arc/concaves) — reprises du prototype valide.
+const COURT_ZONE_LABEL_POS={
+  AILG:[5.1,7.7], AILD:[94.9,7.7],
+  "6MG":[26.3,28.8], "6MC":[50,41.8], "6MD":[73.7,28.8],
+  "9MG":[10,85.6], "9MC":[50,88], "9MD":[90,85.6]
+};
+let _courtZonesCache=null;
+// Genere les 8 polygones de zone une seule fois (memoise — ne depend d'aucune
+// donnee de match), points en % (0-100), conversion vers viewBox (x3.5,
+// x2.08) faite au moment du rendu par renderCourtZones(), pas ici.
+function buildCourtZones(){
+  if(_courtZonesCache) return _courtZonesCache;
+  const VBW=350, postL=148.75, postR=201.25, R9=157.5;
+  const AY=56, AX=88;
+  const toPct=(X,Y)=>({x:X/VBW*100, y:Y/208*100});
+  function arcPoints(post, dir, radius, angleFrom, angleTo, steps=24){
+    const pts=[];
+    for(let i=0;i<=steps;i++){
+      const a=(angleFrom+(angleTo-angleFrom)*i/steps)*Math.PI/180;
+      pts.push(toPct(post+dir*radius*Math.cos(a), radius*Math.sin(a)));
+    }
+    return pts;
+  }
+  const touchAngle=Math.acos(postL/R9)*180/Math.PI;
+  const touchY=R9*Math.sin(touchAngle*Math.PI/180);
+  const farY=207; // ligne de touche basse deja tracee par courtSvgMarkup() a Y=207
+  const centerHalfW=postR-postL, splitL=175-centerHalfW, splitR=175+centerHalfW;
+  function angleAtX(post,X,radius){ return Math.acos(Math.abs(post-X)/radius)*180/Math.PI; }
+  const angleSplitL=angleAtX(postL,splitL,R9), angleSplitR=angleAtX(postR,splitR,R9);
+  const ySplit=R9*Math.sin(angleSplitL*Math.PI/180);
+  const z={};
+  z.AILG=[toPct(0,0),toPct(0,AY),toPct(AX,0)];
+  z.AILD=[toPct(VBW,0),toPct(VBW,AY),toPct(VBW-AX,0)];
+  z['6MG']=[toPct(AX,0),toPct(splitL,0),toPct(splitL,ySplit), ...arcPoints(postL,-1,R9,angleSplitL,touchAngle), toPct(0,AY)];
+  z['6MC']=[toPct(splitL,0),toPct(splitR,0), ...arcPoints(postR,1,R9,angleSplitR,90), toPct(postR,R9),toPct(postL,R9), ...arcPoints(postL,-1,R9,90,angleSplitL)];
+  z['6MD']=[toPct(VBW-AX,0),toPct(splitR,0),toPct(splitR,ySplit), ...arcPoints(postR,1,R9,angleSplitR,touchAngle), toPct(VBW,AY)];
+  z['9MG']=[toPct(0,touchY), ...arcPoints(postL,-1,R9,touchAngle,angleSplitL), toPct(splitL,farY),toPct(0,farY)];
+  z['9MC']=[toPct(splitL,ySplit), ...arcPoints(postL,-1,R9,angleSplitL,90), toPct(postL,R9),toPct(postR,R9), ...arcPoints(postR,1,R9,90,angleSplitR), toPct(splitR,ySplit),toPct(splitR,farY),toPct(splitL,farY)];
+  z['9MD']=[toPct(VBW,touchY), ...arcPoints(postR,1,R9,touchAngle,angleSplitR), toPct(splitR,farY),toPct(VBW,farY)];
+  _courtZonesCache=z;
+  return z;
+}
+function aggregateCourtZones(shots){
+  const data={}; COURT_ZONE_ORDER.forEach(z=>data[z]={g:0,t:0});
+  shots.forEach(s=>{
+    const z=shotZoneCourt(s.x,s.y);
+    if(!data[z]) return;
+    data[z].t++; if(s.goal) data[z].g++;
+  });
+  return data;
+}
+// Rendu SVG des zones de tir + marqueur 7m, a superposer a courtSvgMarkup()
+// (memes reperes 6m/9m/4m/7m deja traces par cette derniere, pas redessines
+// ici). shots: [{x,y,goal}] en %. penData: {g,t} sur les evenements
+// PEN_GOAL/PEN_SAVE/PEN_OFF (jamais x/y, l'origine d'un 7m est toujours le
+// meme point). Marqueur "Sans GB" volontairement absent ici : necessite une
+// nouvelle capture live non construite (cf. docs/arch/), afficher un badge
+// en permanence vide serait un faux repere plutot qu'une aide.
+function renderCourtZones(shots, penData){
+  const zones=buildCourtZones();
+  const data=aggregateCourtZones(shots);
+  const toVB=p=>({x:p.x*3.5, y:p.y*2.08});
+  const polys=COURT_ZONE_ORDER.map(z=>{
+    const pts=zones[z].map(p=>{const v=toVB(p); return v.x+","+v.y;}).join(" ");
+    const d=data[z];
+    const fill=d.t===0?"var(--bg3)":(d.g/d.t>0.5?"rgba(80,200,120,.85)":"rgba(78,205,232,.85)");
+    return `<polygon points="${pts}" fill="${fill}" stroke="var(--court-line)" stroke-width=".6" stroke-linejoin="round"/>`;
+  }).join("");
+  const labels=COURT_ZONE_ORDER.map(z=>{
+    const d=data[z]; if(d.t===0) return "";
+    const p=COURT_ZONE_LABEL_POS[z], v=toVB({x:p[0],y:p[1]});
+    return `<text x="${v.x}" y="${v.y}" style="font-size:9px;font-weight:800;fill:#fff;text-anchor:middle;dominant-baseline:middle;paint-order:stroke;stroke:rgba(0,0,0,.45);stroke-width:1.6px;">${d.g}/${d.t}</text>`;
+  }).join("");
+  const pen=penData||{g:0,t:0};
+  const penColor=pen.t===0?"var(--bg3)":(pen.g/pen.t>0.5?"#50C878":"#4ECDE8");
+  const penMarker=`<circle cx="175" cy="122.5" r="11" fill="${penColor}" stroke="var(--panel)" stroke-width="1.2"/>`+
+    (pen.t>0
+      ?`<text x="175" y="126" style="font-size:9px;font-weight:800;fill:#0c1520;text-anchor:middle;">${pen.g}/${pen.t}</text>`
+      :`<text x="175" y="125.5" style="font-size:7.5px;font-weight:800;fill:#0c1520;text-anchor:middle;">7m</text>`);
+  return polys+labels+penMarker;
+}
+// Bouton de bascule points/zones, reutilise sur Joueurs/Gardiens/Comparaison
+// — un seul etat global S.shotViewMode, pas de reglage par ecran.
+function shotViewToggleHtml(){
+  const isZones=S.shotViewMode==="zones";
+  return `<div class="shotview-toggle">
+    <button class="shotview-btn ${!isZones?"on":""}" data-shotview="points" title="Points localises">📍</button>
+    <button class="shotview-btn ${isZones?"on":""}" data-shotview="zones" title="Zones du terrain">🗺️</button>
+  </div>`;
+}
+
 function renderCourtEmptyState(){
   return `<div class="court-empty-msg">
     <div class="icon">👥</div>
@@ -2499,6 +2631,12 @@ function renderPlayerDetail(){
   const selIdx=pd.selectedShot!=null?pd.selectedShot:null;
   const selShot=selIdx!=null?shots[selIdx]:null;
 
+  // Zones de tir (STORY-43) — memes evts que shots/goals ci-dessus, PEN_* a
+  // part (jamais x/y, origine toujours le point de 7m).
+  const penEvts=evts.filter(e=>ACTIONS[e.type]?.isPen);
+  const penData={g:penEvts.filter(e=>ACTIONS[e.type]?.isGoal).length, t:penEvts.length};
+  const zoneShots=shots.map(s=>({x:s.x,y:s.y,goal:!!ACTIONS[s.type]?.isGoal}));
+
   const ZONES=["HG","HC","HD","MG","MC","MD","BG","BC","BD"];
   const GZ_LABELS={HG:"\u2196",HC:"\u2B06",HD:"\u2197",MG:"\u2190",MC:"\u25CF",MD:"\u2192",BG:"\u2199",BC:"\u2B07",BD:"\u2198"};
   const zoneData={}; ZONES.forEach(z=>zoneData[z]={goals:0,saves:0,offs:0,total:0});
@@ -2525,7 +2663,10 @@ function renderPlayerDetail(){
         <span style="font-size:18px;font-weight:800;color:${color};">${dn}${p.name}</span>
         <span style="font-size:12px;color:var(--t2);margin-left:8px;">${S[side].name}</span>
       </div>
-      <button class="btn btn-xs" id="close-player-detail" style="border-color:var(--border);color:var(--t2);font-size:16px;">✕ Fermer</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${shotViewToggleHtml()}
+        <button class="btn btn-xs" id="close-player-detail" style="border-color:var(--border);color:var(--t2);font-size:16px;">✕ Fermer</button>
+      </div>
     </div>
     <div style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,20px);">
       <div style="display:flex;justify-content:center;gap:16px;padding:8px;">
@@ -2552,7 +2693,7 @@ function renderPlayerDetail(){
       <div style="padding:4px 8px;">
         <svg id="pd-court-svg" viewBox="0 0 350 208" class="pd-court" style="width:100%;display:block;margin:0 auto;border-radius:6px;border:1px solid var(--border);" xmlns="http://www.w3.org/2000/svg">
           ${courtSvgMarkup()}
-          ${shots.map((s,i)=>{
+          ${S.shotViewMode==="zones" ? renderCourtZones(zoneShots, penData) : shots.map((s,i)=>{
             const c = ACTIONS[s.type].isGoal?"#50C878":ACTIONS[s.type].isSave?"#E84E5E":"#E89A4E";
             const isSel=selIdx===i;
             const dimmed=selIdx!=null&&!isSel;
@@ -3229,11 +3370,17 @@ function renderGkSheet(side){
   const saves=allShots.filter(s=>ACTIONS[s.type].isSave).length;
   const offs=allShots.filter(s=>ACTIONS[s.type].isOff).length;
 
+  // Zones de tir (STORY-43) — meme filtre gkIds/type que les points deja
+  // affiches ; PEN_* a part (jamais x/y, toujours au point de 7m).
+  const penEvts=S.events.filter(e=>e.team===oppSide && ACTIONS[e.type]?.isPen && gkIds.includes(e.gkId));
+  const penData={g:penEvts.filter(e=>ACTIONS[e.type]?.isGoal).length, t:penEvts.length};
+  const zoneShots=shots.map(s=>({x:s.x,y:s.y,goal:!!ACTIONS[s.type]?.isGoal}));
+
   const courtHtml=`
     ${goalZoneHeatmap(allShots,"88%")}
     <svg viewBox="0 0 350 208" style="width:100%;max-width:420px;display:block;margin:6px auto 0;border-radius:6px;border:1px solid var(--border);" xmlns="http://www.w3.org/2000/svg">
       ${courtSvgMarkup()}
-      ${shots.map(s=>{
+      ${S.shotViewMode==="zones" ? renderCourtZones(zoneShots, penData) : shots.map(s=>{
         const c = ACTIONS[s.type].isSave?"#4ECDE8":ACTIONS[s.type].isGoal?"#50C878":"#E89A4E";
         if(ACTIONS[s.type].isGoal){
           return `<circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
@@ -3255,7 +3402,10 @@ function renderGkSheet(side){
     <button class="fs-btn" title="Plein écran">⛶</button>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding-right:34px;">
       <div class="card-t" style="color:${color};margin-bottom:0;">🧤 ${t.name}</div>
-      ${gbSelectorHtml}
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${shotViewToggleHtml()}
+        ${gbSelectorHtml}
+      </div>
     </div>
     <div class="gk-sheet-body">
       <div class="gk-sheet-nums fade-in">${numsHtml}</div>
@@ -4030,6 +4180,8 @@ function bind(){
   }; });
   // Stats tabs
   document.querySelectorAll("[data-stab]").forEach(el=>{ el.onclick=()=>{S.statsTab=el.dataset.stab;R();}; });
+  // Bascule points/zones (STORY-43) — reglage global, actif meme en mode lecteur
+  document.querySelectorAll("[data-shotview]").forEach(el=>{ el.onclick=()=>{ setShotViewMode(el.dataset.shotview); }; });
   // Fullscreen card buttons
   document.querySelectorAll(".fs-btn").forEach(btn=>{
     btn.onclick=(e)=>{e.stopPropagation();const card=btn.closest(".card");if(card)openFullscreen(card);};
