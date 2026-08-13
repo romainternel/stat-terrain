@@ -4617,6 +4617,92 @@ function generatePDF(){
     });
     doc.setFillColor(232,70,90);doc.rect(gx,gy+gh,gw-0.3,0.8,"F");
   }
+  // Classe un tir en zone de DÉPART sur le terrain (pas d'impact dans le but) —
+  // bandes x/y approximatives calibrées sur la géométrie de courtSvgMarkup()
+  // (segment 6m à y%≈50, segment 9m à y%≈76), pas de trigonométrie exacte sur
+  // les arcs : un tir n'a pas de position "vraie" au sens du règlement, une
+  // approximation par bandes suffit pour une stat agrégée et reste simple à
+  // vérifier. Réutilise le vocabulaire des postes déjà connu (POS_XY) plutôt
+  // qu'un quadrillage générique, pour rester lisible sans légende à apprendre.
+  function shotOriginZone(x,y){
+    const wing = x<20 || x>80;
+    if(y<25 && wing) return x<50 ? "ALG" : "ALD";
+    if(y<55) return "PVT";
+    if(y<80){
+      if(wing) return x<50 ? "ALG" : "ALD";
+      if(x<38) return "ARG";
+      if(x>62) return "ARD";
+      return "DC";
+    }
+    return "AUTRE";
+  }
+  // Grille "zone d'origine" d'un gardien — même jeu d'événements que
+  // drawGoalZone() pour ce gardien (e.gkId===gkId), bucketé par
+  // shotOriginZone(e.x,e.y) au lieu de e.goalZone. Disposition ALG/PVT/ALD
+  // (rang proche du but) + ARG/DC/ARD (rang 9m), bande AUTRE seulement si
+  // au moins un tir lointain a été enregistré.
+  function drawOriginZone(gx,gy,gw,gh,gkId){
+    const ZONES=["ALG","PVT","ALD","ARG","DC","ARD"];
+    const data={}; ZONES.concat("AUTRE").forEach(z=>{data[z]={g:0,t:0};});
+    S.events.filter(e=>e.gkId===gkId&&e.x!=null&&
+      (ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff)).forEach(e=>{
+      const z=shotOriginZone(e.x,e.y);
+      data[z].t++; if(ACTIONS[e.type]?.isGoal) data[z].g++;
+    });
+    const hasAutre=data.AUTRE.t>0;
+    const rowH=hasAutre?gh*0.4:gh*0.5, cellW=gw/3;
+    ZONES.forEach((z,i)=>{
+      const col=i%3, row=Math.floor(i/3);
+      const x=gx+col*cellW, y=gy+row*rowH;
+      const d=data[z];
+      doc.setFillColor(...(d.t===0?[28,43,64]:(d.g/d.t>0.5?[80,200,120]:[78,205,232])));
+      doc.rect(x,y,cellW-0.5,rowH-0.5,"F");
+      if(d.t>0){
+        wh();doc.setFontSize(6);doc.setFont("helvetica","bold");
+        doc.text(`${d.g}/${d.t}`,x+cellW/2-0.25,y+rowH/2+1,{align:"center"});
+      }
+    });
+    if(hasAutre){
+      const ay=gy+rowH*2;
+      doc.setFillColor(...(data.AUTRE.g/data.AUTRE.t>0.5?[80,200,120]:[78,205,232]));
+      doc.rect(gx,ay,gw-0.5,gh-rowH*2-0.5,"F");
+      wh();doc.setFontSize(5);doc.setFont("helvetica","bold");
+      doc.text(`AUTRE ${data.AUTRE.g}/${data.AUTRE.t}`,gx+gw/2-0.25,ay+(gh-rowH*2)/2+0.8,{align:"center"});
+    }
+  }
+  // Version compacte de drawOriginZone() pour la carte tir joueur — mêmes
+  // zones/couleurs, à l'échelle d'un seul joueur (shots déjà collectés par
+  // collectShotPlayers(), x/y toujours présents contrairement à zone qui
+  // dépend de S.trackGK).
+  function drawPlayerOriginZone(gx,gy,gw,gh,shots){
+    const ZONES=["ALG","PVT","ALD","ARG","DC","ARD"];
+    const data={}; ZONES.concat("AUTRE").forEach(z=>{data[z]={g:0,t:0};});
+    shots.forEach(s=>{
+      const z=shotOriginZone(s.x,s.y);
+      data[z].t++; if(s.goal) data[z].g++;
+    });
+    const hasAutre=data.AUTRE.t>0;
+    const rowH=hasAutre?gh*0.4:gh*0.5, cellW=gw/3;
+    ZONES.forEach((z,i)=>{
+      const col=i%3, row=Math.floor(i/3);
+      const x=gx+col*cellW, y=gy+row*rowH;
+      const d=data[z];
+      if(d.t>0){ doc.setFillColor(...(d.g/d.t>0.5?[80,200,120]:[78,205,232])); }
+      else doc.setFillColor(36,51,82);
+      doc.rect(x,y,cellW-0.3,rowH-0.3,"F");
+      if(d.t>0){
+        wh();doc.setFontSize(5);doc.setFont("helvetica","bold");
+        doc.text(`${d.g}/${d.t}`,x+cellW/2-0.15,y+rowH/2+0.7,{align:"center"});
+      }
+    });
+    if(hasAutre){
+      const ay=gy+rowH*2;
+      doc.setFillColor(...(data.AUTRE.g/data.AUTRE.t>0.5?[80,200,120]:[78,205,232]));
+      doc.rect(gx,ay,gw-0.3,gh-rowH*2-0.3,"F");
+      wh();doc.setFontSize(4);doc.setFont("helvetica","bold");
+      doc.text(`AUTRE ${data.AUTRE.g}/${data.AUTRE.t}`,gx+gw/2-0.15,ay+(gh-rowH*2)/2+0.6,{align:"center"});
+    }
+  }
 
   // ═══ PAGE 1 - COMPARATIF ═══
   bg();
@@ -4684,9 +4770,9 @@ function generatePDF(){
   const playerStats={};
   S.events.filter(e=>e.playerId).forEach(e=>{
     const k=e.team+"|"+e.playerId;
-    if(!playerStats[k]) playerStats[k]={team:e.team,name:e.playerName,num:e.playerNumber,goals:0,pd:0,tirs:0,pb:0,excl:0};
+    if(!playerStats[k]) playerStats[k]={team:e.team,name:e.playerName,num:e.playerNumber,goals:0,mt1:0,mt2:0,pd:0,tirs:0,pb:0,excl:0};
     const p=playerStats[k];
-    if(ACTIONS[e.type]?.isGoal){p.goals++;p.tirs++;}
+    if(ACTIONS[e.type]?.isGoal){p.goals++;p.tirs++;if((e.period||1)===2)p.mt2++;else p.mt1++;}
     if(ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff) p.tirs++;
     if(e.type==="TURNOVER") p.pb++;
     if(e.type==="TWO_MIN"||e.type==="RED") p.excl++;
@@ -4696,7 +4782,7 @@ function generatePDF(){
     // Un joueur qui n'a QUE des passes décisives (aucun but/tir/PB/carton à lui)
     // n'a pas encore d'entrée ici — sans ce fallback sa PD serait silencieusement
     // perdue (visible maintenant que le tableau liste tous les joueurs).
-    if(!playerStats[k]) playerStats[k]={team:e.team,name:e.assistName,num:e.assistNumber,goals:0,pd:0,tirs:0,pb:0,excl:0};
+    if(!playerStats[k]) playerStats[k]={team:e.team,name:e.assistName,num:e.assistNumber,goals:0,mt1:0,mt2:0,pd:0,tirs:0,pb:0,excl:0};
     playerStats[k].pd++;
   });
   
@@ -4746,8 +4832,10 @@ function generatePDF(){
   // décalage à droite plutôt que de forcer les colonnes à une largeur ne
   // supportant pas les noms composés, ce qui provoquait un chevauchement).
   function drawPlayerTable(x,y,players){
-    const cols=["#","NOM","POSTE","BUTS","PD","TIRS","EFF%","PB","2M"];
-    const colW=[10,28,15,13,12,13,15,12,12];
+    // MT1/MT2 (STORY-41) remplacent la colonne BUTS unique — le total reste
+    // lisible par somme visuelle des deux, pas besoin d'une 3e colonne.
+    const cols=["#","NOM","POSTE","MT1","MT2","PD","TIRS","EFF%","PB","2M"];
+    const colW=[10,28,15,9,9,12,13,15,12,12];
     const totalW=colW.reduce((a,b)=>a+b,0);
     card(x-2,y,totalW+4,10+players.length*7);
     let ty=y+7, cx=x;
@@ -4762,18 +4850,18 @@ function generatePDF(){
       if(ri%2===0){doc.setFillColor(36,51,82);doc.rect(x-1,ty-3,totalW+2,7,"F");}
       cx=x;
       const eff=p.tirs>0?Math.round(p.goals/p.tirs*100)+"%":"-";
-      const row=[p.num,p.name,p.position||"?",String(p.goals),String(p.pd),String(p.tirs),eff,String(p.pb),String(p.excl)];
+      const row=[p.num,p.name,p.position||"?",String(p.mt1),String(p.mt2),String(p.pd),String(p.tirs),eff,String(p.pb),String(p.excl)];
       row.forEach((v,i)=>{
         if(i===0){t2();doc.setFontSize(8);doc.setFont("helvetica","bold");}
         else if(i===1){wh();doc.setFontSize(8);doc.setFont("helvetica","bold");}
-        else if(i===3){grn();doc.setFontSize(9);doc.setFont("helvetica","bold");}
-        else if(i===4){doc.setTextColor(240,199,94);doc.setFontSize(8);doc.setFont("helvetica","bold");}
-        else if(i===6){
+        else if(i===3||i===4){grn();doc.setFontSize(9);doc.setFont("helvetica","bold");}
+        else if(i===5){doc.setTextColor(240,199,94);doc.setFontSize(8);doc.setFont("helvetica","bold");}
+        else if(i===7){
           const ev=parseInt(v);
           if(!isNaN(ev)){if(ev>=70)grn();else if(ev>=50)doc.setTextColor(240,199,94);else red();}else t3();
           doc.setFontSize(8);doc.setFont("helvetica","bold");
         }
-        else if(i>=7){
+        else if(i>=8){
           if(v!=="0")red();else t3();
           doc.setFontSize(8);doc.setFont("helvetica","normal");
         }
@@ -4790,18 +4878,18 @@ function generatePDF(){
   doc.addPage();bg();
   pageHeader("JOUEURS",joueursSubtitle);
 
-  const tableX=15+(W-30-130)/2;
+  const tableX=15+(W-30-135)/2; // 135 = somme colW de drawPlayerTable() (STORY-41 : 130+5 pour MT1/MT2)
 
   // Player rows — tous les joueurs sélectionnés pour le match, pas seulement
   // ceux qui ont un événement individuel (but/PD/PB/exclusion) : un joueur qui
   // a joué sans rien marquer doit quand même apparaître (à 0).
   const hPlayers=S.home.players.filter(p=>p.selected).map(p=>{
     const stat=playerStats["home|"+p.id];
-    return stat ? {...stat, position:p.position} : {team:"home",name:p.name,num:p.number,position:p.position,goals:0,pd:0,tirs:0,pb:0,excl:0};
+    return stat ? {...stat, position:p.position} : {team:"home",name:p.name,num:p.number,position:p.position,goals:0,mt1:0,mt2:0,pd:0,tirs:0,pb:0,excl:0};
   }).sort((a,b)=>b.goals-a.goals);
   const aPlayers=S.away.players.filter(p=>p.selected).map(p=>{
     const stat=playerStats["away|"+p.id];
-    return stat ? {...stat, position:p.position} : {team:"away",name:p.name,num:p.number,position:p.position,goals:0,pd:0,tirs:0,pb:0,excl:0};
+    return stat ? {...stat, position:p.position} : {team:"away",name:p.name,num:p.number,position:p.position,goals:0,mt1:0,mt2:0,pd:0,tirs:0,pb:0,excl:0};
   }).sort((a,b)=>b.goals-a.goals);
 
   let ty=15;
@@ -4897,7 +4985,7 @@ function generatePDF(){
       return {player:p, shots, pb};
     }).filter(ps=>ps.shots.length>0);
   }
-  const scGridCols=2, scGap=6, scCellW=(W-30-(scGridCols-1)*scGap)/scGridCols, scCellH=46;
+  const scGridCols=2, scGap=6, scCellW=(W-30-(scGridCols-1)*scGap)/scGridCols, scCellH=62;
   const scCourtW=scCellW*0.58, scCourtH=28, scZoneX=scCourtW+8, scZoneW=scCellW-scZoneX-3, scZoneH=20;
   function drawShotCardsSection(y, pageTitle, subtitle, players){
     let gpx=15, gpy=y, gcol=0;
@@ -4914,10 +5002,17 @@ function generatePDF(){
       t2();doc.setFontSize(6);doc.setFont("helvetica","normal");
       doc.text(`${g}B ${tt}T (${tt>0?Math.round(g/tt*100):0}%) - ${ps.pb}PB`,cardX+scCellW-3,gpy+6,{align:"right"});
       drawCourt(cardX+3,gpy+9,scCourtW,scCourtH,ps.shots,"");
+      // Impact (si S.trackGK a capturé des zones) puis Origine (toujours,
+      // x/y étant systématiquement présents) — empilées verticalement plutôt
+      // que côte à côte, la carte étant déjà tendue en largeur (STORY-40).
+      let rightY=gpy+9;
       if(ps.shots.some(s=>s.zone)){
-        t3();doc.setFontSize(5);doc.text("Impact",cardX+scZoneX,gpy+9);
-        drawPlayerZoneGrid(cardX+scZoneX,gpy+11,scZoneW,scZoneH,ps.shots);
+        t3();doc.setFontSize(5);doc.text("Impact",cardX+scZoneX,rightY);
+        drawPlayerZoneGrid(cardX+scZoneX,rightY+2,scZoneW,scZoneH,ps.shots);
+        rightY+=2+scZoneH+3;
       }
+      t3();doc.setFontSize(5);doc.text("Origine",cardX+scZoneX,rightY);
+      drawPlayerOriginZone(cardX+scZoneX,rightY+2,scZoneW,scZoneH,ps.shots);
       gcol++;
       if(gcol>=scGridCols){ gcol=0; gpx=15; gpy+=scCellH; } else { gpx+=scCellW+scGap; }
     });
@@ -4974,14 +5069,18 @@ function generatePDF(){
       gy2+=10;
     });
     
-    // Goal zone
+    // Goal zone (impact) + origin zone, côte à côte dans la même carte —
+    // STORY-40 : pas d'ajout de hauteur de page, la carte reste 30mm comme
+    // avant (ensurePageSpace() n'existe pas sur cette page, cf. docs/risks/).
     card(g.x,58,halfW,30);
     doc.setTextColor(...g.color);doc.setFontSize(8);doc.setFont("helvetica","bold");
-    doc.text("ZONES D'IMPACT",g.x+4,64);
+    doc.text("ZONES D'IMPACT & D'ORIGINE",g.x+4,64);
     t3();doc.setFontSize(4);doc.setFont("helvetica","italic");
-    doc.text("Stat des tireurs (ex : 1/1 = 1 but, pas d'arret)",g.x+4,67);
+    doc.text("Impact : stat des tireurs (0/1 = 1 but, pas d'arret)",g.x+4,66.8);
+    doc.text("Origine : zone de depart du tir, meme lecture",g.x+4,69.1);
     doc.setFont("helvetica","normal");
-    drawGoalZone(g.x+(halfW-50)/2,69,50,16,g.gkId);
+    drawGoalZone(g.x+3,71,34,14,g.gkId);
+    drawOriginZone(g.x+halfW-3-34,71,34,14,g.gkId);
     
     // Court with shots
     card(g.x,91,halfW,55);
