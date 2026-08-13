@@ -2535,13 +2535,14 @@ function renderShotOverlay(){
         ${courtSvgMarkup()}
         ${teamShots(o.team).map(s=>{
           const c = ACTIONS[s.type].isGoal?"#50C878":ACTIONS[s.type].isSave?"#E84E5E":"#E89A4E";
+          const sx=s.x/100*350, sy=s.y/100*208;
           if(ACTIONS[s.type].isGoal){
-            return `<circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
+            return `<circle cx="${sx}" cy="${sy}" r="3" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
           }
           return `<g>
-            <circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}44" stroke="${c}" stroke-width="1"/>
-            <line x1="${s.x-2}" y1="${s.y-2}" x2="${s.x+2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="${s.x+2}" y1="${s.y-2}" x2="${s.x-2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="${sx}" cy="${sy}" r="3" fill="${c}44" stroke="${c}" stroke-width="1"/>
+            <line x1="${sx-2}" y1="${sy-2}" x2="${sx+2}" y2="${sy+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="${sx+2}" y1="${sy-2}" x2="${sx-2}" y2="${sy+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
           </g>`;
         }).join("")}
       </svg>
@@ -2708,13 +2709,14 @@ function renderPlayerDetail(){
             const dimmed=selIdx!=null&&!isSel;
             const r=isSel?7:4;
             const op=dimmed?"0.25":"1";
+            const sx=s.x/100*350, sy=s.y/100*208;
             if(ACTIONS[s.type].isGoal){
-              return '<circle data-pd-shot="'+i+'" cx="'+s.x+'" cy="'+s.y+'" r="'+r+'" fill="'+c+(isSel?'aa':'66')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1.5)+'" style="opacity:'+op+';cursor:pointer;"/>';
+              return '<circle data-pd-shot="'+i+'" cx="'+sx+'" cy="'+sy+'" r="'+r+'" fill="'+c+(isSel?'aa':'66')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1.5)+'" style="opacity:'+op+';cursor:pointer;"/>';
             }
             return '<g data-pd-shot="'+i+'" style="opacity:'+op+';cursor:pointer;">'+
-              '<circle cx="'+s.x+'" cy="'+s.y+'" r="'+r+'" fill="'+c+(isSel?'88':'44')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1)+'"/>'+
-              '<line x1="'+(s.x-3)+'" y1="'+(s.y-3)+'" x2="'+(s.x+3)+'" y2="'+(s.y+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
-              '<line x1="'+(s.x+3)+'" y1="'+(s.y-3)+'" x2="'+(s.x-3)+'" y2="'+(s.y+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
+              '<circle cx="'+sx+'" cy="'+sy+'" r="'+r+'" fill="'+c+(isSel?'88':'44')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1)+'"/>'+
+              '<line x1="'+(sx-3)+'" y1="'+(sy-3)+'" x2="'+(sx+3)+'" y2="'+(sy+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
+              '<line x1="'+(sx+3)+'" y1="'+(sy-3)+'" x2="'+(sx-3)+'" y2="'+(sy+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
               '</g>';
           }).join("")}
         </svg>
@@ -3103,6 +3105,63 @@ function openFullscreen(cardEl){
   overlay.querySelector("#fs-close-btn").onclick=()=>{overlay.remove();};
 }
 
+// Mini-terrain agrege par equipe — Stats -> Comparaison (STORY-44). Meme
+// bascule/geometrie que Joueurs/Gardiens (STORY-43). Nouveaute locale a cet
+// ecran : marqueurs PB (TURNOVER, needsMap deja vrai mais jamais dessine
+// ailleurs) — uniquement en mode "points" (un 3e chiffre par zone en mode
+// "zones" surchargerait un texte deja dense ; le total PB reste visible via
+// la stat d'en-tete quel que soit le mode).
+function renderCompareCourt(side){
+  const t=S[side]; const color=side==="home"?"var(--green)":"var(--red)";
+  const shots=S.events.filter(e=>e.team===side&&(ACTIONS[e.type]?.isGoal||ACTIONS[e.type]?.isSave||ACTIONS[e.type]?.isOff)&&e.x!=null);
+  const pbShots=S.events.filter(e=>e.team===side&&e.type==="TURNOVER"&&e.x!=null);
+  const goals=shots.filter(s=>ACTIONS[s.type]?.isGoal).length;
+  const total=shots.length;
+  const pb=teamStat(side,"TURNOVER");
+  const penEvts=S.events.filter(e=>e.team===side&&ACTIONS[e.type]?.isPen);
+  const penData={g:penEvts.filter(e=>ACTIONS[e.type]?.isGoal).length, t:penEvts.length};
+  const zoneShots=shots.map(s=>({x:s.x,y:s.y,goal:!!ACTIONS[s.type]?.isGoal}));
+  const isZones=S.shotViewMode==="zones";
+
+  const pointsMarkup=shots.map(s=>{
+    const c=ACTIONS[s.type].isGoal?"#50C878":ACTIONS[s.type].isSave?"#E84E5E":"#E89A4E";
+    const sx=s.x/100*350, sy=s.y/100*208;
+    if(ACTIONS[s.type].isGoal){
+      return `<circle cx="${sx}" cy="${sy}" r="4" fill="${c}66" stroke="${c}" stroke-width="1.5"/>`;
+    }
+    return `<g><circle cx="${sx}" cy="${sy}" r="4" fill="${c}44" stroke="${c}" stroke-width="1"/>`+
+      `<line x1="${sx-3}" y1="${sy-3}" x2="${sx+3}" y2="${sy+3}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>`+
+      `<line x1="${sx+3}" y1="${sy-3}" x2="${sx-3}" y2="${sy+3}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/></g>`;
+  }).join("");
+  const pbMarkup=pbShots.map(s=>{
+    const c="#E8465A";
+    const sx=s.x/100*350, sy=s.y/100*208;
+    return `<path d="M ${sx} ${sy-4.5} L ${sx+4.5} ${sy} L ${sx} ${sy+4.5} L ${sx-4.5} ${sy} Z" fill="${c}55" stroke="${c}" stroke-width="1.3"/>`;
+  }).join("");
+
+  return `<div class="card" style="position:relative;">
+    <button class="fs-btn" title="Plein écran">⛶</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-right:34px;">
+      <div class="card-t" style="color:${color};margin-bottom:0;">🥅 ${t.name}</div>
+      ${shotViewToggleHtml()}
+    </div>
+    <div style="display:flex;justify-content:center;gap:20px;margin-bottom:8px;">
+      <div style="text-align:center;"><div class="mono" style="font-size:16px;font-weight:800;">${goals}/${total}</div><div style="font-size:9px;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;">Buts/Tirs</div></div>
+      <div style="text-align:center;"><div class="mono" style="font-size:16px;font-weight:800;color:var(--red);">${pb}</div><div style="font-size:9px;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;">PB</div></div>
+    </div>
+    <svg viewBox="0 0 350 208" style="width:100%;max-width:420px;display:block;margin:0 auto;border-radius:6px;border:1px solid var(--border);" xmlns="http://www.w3.org/2000/svg">
+      ${courtSvgMarkup()}
+      ${isZones ? renderCourtZones(zoneShots, penData) : pointsMarkup+pbMarkup}
+    </svg>
+    ${!isZones?`<div style="display:flex;justify-content:center;gap:12px;margin-top:6px;font-size:10px;color:var(--t2);flex-wrap:wrap;">
+      <span><span style="color:#50C878">●</span> But</span>
+      <span><span style="color:var(--red)">✕</span> Arrêté</span>
+      <span><span style="color:var(--orange)">✕</span> Hors cadre</span>
+      <span><span style="color:var(--red)">◆</span> PB</span>
+    </div>`:""}
+  </div>`;
+}
+
 function renderStatCompare(){
   const hGoals=teamScore("home"), aGoals=teamScore("away");
   // Flags isSave/isOff (pas teamStat exact-match) pour inclure les tirs sur pénalty,
@@ -3210,6 +3269,10 @@ function renderStatCompare(){
     }).join("")}
   </div>`;
 
+  const compareCourtSvg=`<div class="stat-courts" style="margin-top:12px;">
+    ${["home","away"].map(side=>renderCompareCourt(side)).join("")}
+  </div>`;
+
   return `<div class="compare-evo-row">
     <div class="card" style="position:relative;flex:1;min-width:280px;max-width:none;margin:0;">
       <button class="fs-btn" title="Plein écran">⛶</button>
@@ -3277,7 +3340,7 @@ function renderStatCompare(){
         <span><span style="display:inline-block;width:10px;height:10px;background:#222;border:1px solid #666;border-radius:2px;vertical-align:middle;"></span> TM adv.</span>
       </div>
     </div>`:""}
-  </div>${posSvg}` + renderGkDetailTables();
+  </div>${compareCourtSvg}${posSvg}` + renderGkDetailTables();
 }
 
 function renderGkDetailTables(){
@@ -3391,13 +3454,14 @@ function renderGkSheet(side){
       ${courtSvgMarkup()}
       ${S.shotViewMode==="zones" ? renderCourtZones(zoneShots, penData) : shots.map(s=>{
         const c = ACTIONS[s.type].isSave?"#4ECDE8":ACTIONS[s.type].isGoal?"#50C878":"#E89A4E";
+        const sx=s.x/100*350, sy=s.y/100*208;
         if(ACTIONS[s.type].isGoal){
-          return `<circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
+          return `<circle cx="${sx}" cy="${sy}" r="3" fill="${c}55" stroke="${c}" stroke-width="1"/>`;
         }
         return `<g>
-          <circle cx="${s.x}" cy="${s.y}" r="3" fill="${c}44" stroke="${c}" stroke-width="1"/>
-          <line x1="${s.x-2}" y1="${s.y-2}" x2="${s.x+2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
-          <line x1="${s.x+2}" y1="${s.y-2}" x2="${s.x-2}" y2="${s.y+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="${sx}" cy="${sy}" r="3" fill="${c}44" stroke="${c}" stroke-width="1"/>
+          <line x1="${sx-2}" y1="${sy-2}" x2="${sx+2}" y2="${sy+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="${sx+2}" y1="${sy-2}" x2="${sx-2}" y2="${sy+2}" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/>
         </g>`;
       }).join("")}
     </svg>

@@ -32,8 +32,14 @@ Un seul composant visuel réutilisé aux 4 emplacements (Joueurs, Gardiens, Comp
 ## F4/F5 — Joueurs et Gardiens
 Remplacement in-place : même emplacement, même taille de terrain, seul le contenu dessiné par-dessus `courtSvgMarkup()` change selon le réglage. La grille Impact (HG/HC/etc.) reste identique, non affectée par le bouton.
 
-## F6 — Nouveau bloc Comparaison
-Placé entre le bandeau score (déjà en haut de l'onglet) et le tableau comparatif existant : deux mini-terrains côte à côte (FENIX à gauche, adversaire à droite, même largeur que les blocs déjà utilisés dans `renderStatGk()`), chacun avec son but et son propre ratio global par zone (tous tireurs confondus côté équipe). Même bouton de bascule, partagé avec les 2 autres écrans (un seul réglage global, donc l'état affiché ici reflète le même choix que Joueurs/Gardiens).
+## F6 — Nouveau bloc Comparaison (révisé après retour Romain, usage réel de STORY-43)
+Placement revu : **au-dessus de la carte "🎯 Tirs par poste"** (pas au-dessus du tableau comparatif — ce dernier reste la toute première chose visible sous le bandeau score, inchangé). Logique : ce nouveau bloc et "Tirs par poste" sont tous deux des vues de répartition des tirs (par zone terrain vs par poste de jeu), ça les regroupe visuellement.
+
+Deux mini-terrains côte à côte (FENIX à gauche, adversaire à droite, même largeur que les blocs déjà utilisés dans `renderStatGk()`), chacun avec son but et son propre ratio global par zone (tous tireurs confondus côté équipe). Même bouton de bascule, partagé avec les 2 autres écrans (un seul réglage global, donc l'état affiché ici reflète le même choix que Joueurs/Gardiens).
+
+**Nouveau — stats d'en-tête par carte** : chaque mini-terrain affiche en en-tête `Buts/Tirs` (agrégat équipe, même calcul que la ligne "Buts/Tirs" du tableau comparatif juste en dessous — pas une nouvelle source de vérité) et `PB` (pertes de balle, agrégat équipe, `teamStat(side,"TURNOVER")`, déjà calculé ailleurs sur cet écran).
+
+**Nouveau — PB sur le terrain, mode "points" uniquement** : `TURNOVER` capture déjà `x`/`y` (`needsMap:true`) mais n'était affiché sur aucun terrain jusqu'ici. Romain veut les pertes de balle visibles comme marqueurs sur le mini-terrain **seulement en mode "points"** (marqueur distinct des points but/arrêt/hors-cadre — icône `↩` déjà utilisée pour PB ailleurs dans l'app, couleur `var(--red)` déjà celle de PB dans `ACTIONS`). **En mode "zones", les PB ne sont pas affichées** : chaque zone n'écrit que le ratio buts/tirs (comme sur Joueurs/Gardiens) — ajouter un 3e nombre par zone surchargerait un texte déjà dense ; le total PB reste visible via la stat d'en-tête, quel que soit le mode.
 
 ## F1 — Tableau Joueurs PDF
 Colonnes `#, NOM, POSTE, BUT/TIR, EFF%, PO, PD, PB, 2M, MT1, MT2` — même style de cellule que l'existant (couleurs conditionnelles déjà en place : vert si but, jaune si PD/PO, rouge si PB/2M non nul), simplement une colonne de plus (PO) et deux colonnes fusionnées en une (BUT/TIR).

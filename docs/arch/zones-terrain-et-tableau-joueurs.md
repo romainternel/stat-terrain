@@ -116,8 +116,12 @@ Le bloc `${shots.map(...)}` (points/croix SVG) devient conditionnel sur `S.shotV
 ## F5 — `renderGkSheet()` (~ligne 3179)
 Même bascule sur le bloc SVG de `courtHtml` (`shots.map()`). `goalZoneHeatmap()` (grille Impact) non touchée. Bouton de bascule dans l'en-tête de la carte, à côté du sélecteur de GB.
 
-## F6 — `renderStatCompare()` (~ligne 2956) — ajout net
-Nouveau bloc avant le tableau `stats` existant : deux mini-terrains (réutilisent `courtSvgMarkup()` + `renderCourtZones()`/points existants), un par équipe, agrégeant **tous** les tirs de l'équipe (`S.events.filter(e=>e.team===side&&...)`, même filtre que `renderStatPlayers()` déjà utilise). Même bouton de bascule (état partagé `S.shotViewMode`, pas de nouvel état local).
+## F6 — `renderStatCompare()` (~ligne 3106) — ajout net, révisé après retour Romain post-STORY-43
+Nouveau bloc **entre `stats`+évolution du score et le bloc `posSvg` ("🎯 Tirs par poste")** — pas avant le tableau `stats` comme prévu initialement (placement corrigé sur retour direct de Romain). Deux mini-terrains (réutilisent `courtSvgMarkup()` + `renderCourtZones()`/points existants), un par équipe, agrégeant **tous** les tirs de l'équipe (`S.events.filter(e=>e.team===side&&(ACTIONS[e.type]?.isGoal||isSave||isOff)&&e.x!=null)`, même filtre que `posShots` juste en dessous utilise déjà). Même bouton de bascule (état partagé `S.shotViewMode`, pas de nouvel état local).
+
+**En-tête de carte** : `Buts/Tirs` réutilise `hGoals`/`hTotal`/`aGoals`/`aTotal` déjà calculés en haut de `renderStatCompare()` pour la ligne "Buts/Tirs" du tableau `stats` — ne pas recalculer. `PB` réutilise `teamStat(side,"TURNOVER")`, déjà appelé pour la ligne "PB" du même tableau.
+
+**Marqueurs PB (mode "points" uniquement)** : `TURNOVER` a `needsMap:true` (x/y capturé) mais n'est filtré dans aucun rendu de terrain existant (`shots` dans `renderPlayerDetail()`/`renderGkSheet()` ne retient que `isGoal||isSave||isOff`). Pour F6, construire une liste séparée `pbShots = S.events.filter(e=>e.team===side&&e.type==="TURNOVER"&&e.x!=null)` et la dessiner en plus des points existants **seulement quand `S.shotViewMode==="points"`** — marqueur visuellement distinct (couleur `ACTIONS.TURNOVER.color` = `var(--red)`, forme différente des cercles but/arrêt/hors-cadre pour rester lisible, ex. petit losange ou triangle), jamais ajouté à `zoneShots`/`renderCourtZones()` (mode "zones" reste inchangé : ratio buts/tirs uniquement, pas de 3e chiffre par zone). Ne touche à aucun rendu existant sur Joueurs/Gardiens — capacité nouvelle, strictement locale à F6.
 
 ## F7 — PDF : `generatePDF()` bascule en zones (dépend de F2)
 - **Retiré** : `drawOriginZone()`, `drawPlayerOriginZone()` (STORY-40) et leurs deux points d'appel (carte "ZONES D'IMPACT & D'ORIGINE" page Gardiens, section "Origine" des cartes joueur) — obsolètes, remplacés.
