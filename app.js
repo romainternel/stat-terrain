@@ -2268,10 +2268,16 @@ function courtSvgMarkup(){
 // (poteau->touche = 148.75 > 105), donc la vraie frontiere de zone est R9
 // partout ; la ligne des 6m (deja tracee par courtSvgMarkup()) reste un pur
 // repere visuel, pas une frontiere.
+// Portee des ailes, en unites viewBox (350x208) — constante partagee entre
+// shotZoneCourt() et buildCourtZones() pour eviter qu'elles divergent (deja
+// arrive une fois). Agrandie une 4e fois : des tirs reellement pres du corner
+// en usage reel (pas seulement en donnees de test synthetiques) tombaient
+// encore hors du triangle aile et etaient classes en 6mG/6mD par erreur.
+const COURT_WING_AY=80, COURT_WING_AX=100;
 function shotZoneCourt(xPct, yPct){
   const X=xPct/100*350, Y=yPct/100*208;
   const postL=148.75, postR=201.25, R9=157.5;
-  const AY=56, AX=88; // portee des ailes, calibree sur le prototype valide
+  const AY=COURT_WING_AY, AX=COURT_WING_AX;
   const centerHalfW=postR-postL, splitL=175-centerHalfW, splitR=175+centerHalfW;
   if(Y<=0) return X<AX?"AILG":(X>350-AX?"AILD":"6MC");
   if(X<AX && Y < AY*(1-X/AX)) return "AILG";
@@ -2289,10 +2295,13 @@ function shotZoneCourt(xPct, yPct){
 }
 const COURT_ZONE_ORDER=["AILG","6MG","6MC","6MD","AILD","9MG","9MC","9MD"];
 // Positions de texte pre-calculees par zone en % (pas le centroide brut, qui
-// tombe mal sur les zones en arc/concaves) — reprises du prototype valide.
+// tombe mal sur les zones en arc/concaves). 6mG/6mD deplaces entre les
+// lignes 6m et 9m (retour Romain, usage reel) ; 6mC volontairement laisse
+// entre 4m et 6m (rester "entre 6m/9m" le mettrait pile sur le marqueur 7m,
+// confusion directe) ; AILG/AILD/9m* inchanges.
 const COURT_ZONE_LABEL_POS={
   AILG:[5.1,7.7], AILD:[94.9,7.7],
-  "6MG":[26.3,28.8], "6MC":[50,41.8], "6MD":[73.7,28.8],
+  "6MG":[26.3,58], "6MC":[50,41.8], "6MD":[73.7,58],
   "9MG":[10,85.6], "9MC":[50,88], "9MD":[90,85.6]
 };
 let _courtZonesCache=null;
@@ -2302,7 +2311,7 @@ let _courtZonesCache=null;
 function buildCourtZones(){
   if(_courtZonesCache) return _courtZonesCache;
   const VBW=350, postL=148.75, postR=201.25, R9=157.5;
-  const AY=56, AX=88;
+  const AY=COURT_WING_AY, AX=COURT_WING_AX;
   const toPct=(X,Y)=>({x:X/VBW*100, y:Y/208*100});
   function arcPoints(post, dir, radius, angleFrom, angleTo, steps=24){
     const pts=[];

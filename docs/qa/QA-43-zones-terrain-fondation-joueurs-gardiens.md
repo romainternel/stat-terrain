@@ -43,3 +43,21 @@ Aucune — page Joueurs (stats, grille Impact) et page Gardiens (stats numériqu
 
 ## Verdict
 **PASSED**
+
+---
+
+## Hotfix post-livraison (v91) — corner mal classé "6mG" en usage réel
+
+Romain a testé avec de vraies données de match et signalé un tir clairement à l'aile classé "6mG" au lieu de "AilG", plus une demande de repositionnement des labels (les textes 6mG/6mD doivent être entre les lignes 6m et 9m, sauf 6mC qui doit rester entre 4m et 6m pour ne pas se confondre avec le marqueur 7m).
+
+**Cause** : constantes d'angle d'aile (`AY=56, AX=88`, déjà agrandies 4 fois pendant le prototypage) encore trop petites pour capturer les tirs de coin réels — le prototype avait été validé sur des cas synthétiques/dessin à main levée, pas sur un vrai tir de match.
+
+**Correctif vérifié** :
+- `COURT_WING_AY=80, COURT_WING_AX=100` (constantes désormais partagées entre `shotZoneCourt()` et `buildCourtZones()` via `COURT_WING_AY`/`COURT_WING_AX`, élimine le risque de divergence qui existait avec deux valeurs dupliquées)
+- Vérifié par appel direct de fonction : `shotZoneCourt(9,11)` (coordonnées du corner signalé par Romain) retourne maintenant `"AILG"` (retournait `"6MG"` avant le correctif)
+- `COURT_ZONE_LABEL_POS["6MG"]`/`["6MD"]` déplacés de `[26.3,28.8]`/`[73.7,28.8]` vers `[26.3,58]`/`[73.7,58]` — confirmé visuellement (rendu SVG réel dumpé et capturé en image) : le label tombe désormais entre l'arc 6m et l'arc 9m, plus près du but
+- `COURT_ZONE_LABEL_POS["6MC"]` volontairement laissé inchangé à `[50,41.8]` (entre 4m et 6m) — confirmé qu'il reste visuellement séparé du badge du marqueur 7m (qui occupe le centre entre 6m et 9m)
+
+**Méthode de vérification** : contournement d'un bug d'outillage CDP (les requêtes DOM via `Runtime.evaluate` retournaient des résultats vides après le premier chargement cross-origin d'une session Chrome fraîche, malgré un rendu visuel correct) — vérification faite par appel direct des fonctions JS (`shotZoneCourt()`, dump de `renderCourtZones()`) puis rendu du SVG obtenu dans une page HTML autonome capturée en image pour confirmation visuelle finale.
+
+**Verdict hotfix** : **PASSED** — corrigé et vérifié (calcul + visuel). Reste à confirmer par Romain sur un nouveau test avec de vraies données de match.

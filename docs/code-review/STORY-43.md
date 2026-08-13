@@ -39,3 +39,17 @@ Jeu de données dédié (8 tirs couvrant explicitement les 8 zones + 2 événeme
 
 ## Verdict
 **APPROUVÉ**
+
+---
+
+## Hotfix post-livraison (v91) — recalibrage aile + repositionnement labels
+
+Retour terrain de Romain (usage réel, pas un cas de test) : un tir de coin classé "6mG" au lieu de "AilG". Constantes `AY/AX` (56/88 à la livraison de STORY-43) encore insuffisantes malgré 4 agrandissements successifs pendant le prototypage — confirme que le prototype seul (mêmes s'il avait été validé visuellement par Romain) ne remplace pas un test avec de vraies données de match pour ce type de seuil géométrique.
+
+**Changement** :
+- `AY=56,AX=88` → `AY=80,AX=100`, désormais factorisées en constantes de module `COURT_WING_AY`/`COURT_WING_AX` réutilisées par `shotZoneCourt()` ET `buildCourtZones()` — corrige au passage une vraie duplication (les deux fonctions avaient chacune leur propre littéral `AY`/`AX`, un risque de divergence silencieuse identifié mais non traité lors du Code Review initial ; traité maintenant).
+- `COURT_ZONE_LABEL_POS["6MG"/"6MD"]` : Y déplacé de `28.8` à `58` (entre les lignes 6m/9m). `["6MC"]` explicitement inchangé (entre 4m/6m, pour ne pas chevaucher le badge du marqueur 7m) — commentaire ajouté dans le code expliquant ce choix asymétrique, pour éviter qu'un futur passage ne "corrige" 6mC par cohérence apparente avec 6mG/6mD.
+
+**Vérification** : appel direct de `shotZoneCourt(9,11)` (coordonnées du cas réel signalé) confirmé `"AILG"` ; rendu SVG réel dumpé et capturé en image (contournement d'un bug d'outillage CDP sans lien avec le code applicatif) pour confirmation visuelle des nouvelles positions de label.
+
+**Verdict hotfix** : **APPROUVÉ**.
