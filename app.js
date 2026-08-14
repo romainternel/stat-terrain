@@ -162,13 +162,14 @@ function setShotViewMode(mode){
 function saveTeams(){ localStorage.setItem(teamsStorageKey(),JSON.stringify({home:S.home,away:S.away})); }
 
 // ─── Choix d'equipe (-18 / CF) — STORY-50/51 ───
-async function chooseTeamProfile(profile){
+function chooseTeamProfile(profile){
   S.teamProfile=profile;
   try{ localStorage.setItem("hb2_team_profile", profile); }catch(e){}
   loadTeamsForActiveProfile();
-  R();
-  // rattrape checkForResumableMatch(), saute a l'init tant qu'aucun profil n'etait connu
-  if(S.authOk) await checkForResumableMatch();
+  // Volontairement PAS de checkForResumableMatch() ici — retour explicite de Romain : le fait de
+  // cliquer -18/CF ne doit jamais etre interrompu par une proposition de reprise de match. Le
+  // flux normal de reprise (ouverture d'appli sur un appareil qui connait deja son equipe,
+  // checkAuthSession()/signInShared()) reste inchange, non affecte par ce retrait.
   R();
 }
 function switchTeamProfile(){
@@ -223,8 +224,10 @@ async function checkAuthSession(){
     S.authOk=true; // fail-open : jamais bloquer l'usage local sur une erreur réseau/API
   }
   // Tant qu'aucun profil d'equipe n'est connu (1er lancement sur cet appareil), impossible de
-  // filtrer correctement par team_profile — l'ecran de choix (STORY-51) s'en charge, puis
-  // chooseTeamProfile() rattrape cet appel lui-meme une fois le profil choisi.
+  // filtrer correctement par team_profile — l'ecran de choix (STORY-51) prend le relais. Une fois
+  // le profil choisi, PAS de rattrapage ici volontairement (retour Romain : cliquer -18/CF ne
+  // doit jamais etre interrompu par une proposition de reprise) — le prochain vrai chargement
+  // de page sur cet appareil (deja configure) refera ce test normalement.
   if(S.authOk && S.teamProfile) await checkForResumableMatch();
   R();
 }
@@ -236,7 +239,7 @@ async function signInShared(password){
   const {error}=await client.auth.signInWithPassword({email:SUPABASE_AUTH_EMAIL,password});
   if(error){ S.authError="Code d'accès incorrect."; R(); return; }
   S.authOk=true;
-  if(S.teamProfile) await checkForResumableMatch(); // sinon rattrape par chooseTeamProfile() au choix d'equipe
+  if(S.teamProfile) await checkForResumableMatch(); // uniquement si le profil est deja connu sur cet appareil
   R();
 }
 
@@ -1754,7 +1757,7 @@ function R(){
 function renderHeader(){
   const views=[{id:"setup",l:"🤾 Équipes"},{id:"match",l:"⚡ Match"},{id:"stats",l:"📊 Stats"},{id:"bilan",l:"📈 Bilan"},{id:"history",l:"📁 Matchs"}];
   return `<div class="hdr">
-    <div class="logo"><div class="logo-i"><img src="${FENIX_LOGO}"></div><div><h1>CF FENIX STAT</h1><small>Toulouse Handball</small></div></div>
+    <div class="logo" id="home-logo-btn" style="cursor:pointer;" title="Retour à l'accueil (changer d'équipe)"><div class="logo-i"><img src="${FENIX_LOGO}"></div><div><h1>CF FENIX STAT</h1><small>Toulouse Handball</small></div></div>
     ${S.view==="match"?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>`:""}
     <div class="nav">${views.map(v=>`<button class="nav-b ${S.view===v.id?"on":""}" data-v="${v.id}">${v.l}</button>`).join("")}</div>
   </div>`;
@@ -4421,6 +4424,9 @@ function bind(){
   // Changer d'equipe (-18/CF) — STORY-50
   const switchTeamBtn=document.getElementById("switch-team-btn");
   if(switchTeamBtn) switchTeamBtn.onclick=()=>{ S.settingsOpen=false; switchTeamProfile(); };
+  // Retour rapide a l'accueil (logo header, meme action que le bouton des reglages)
+  const homeLogoBtn=document.getElementById("home-logo-btn");
+  if(homeLogoBtn) homeLogoBtn.onclick=()=>{ switchTeamProfile(); };
   // Mode Simple: boutons de saisie rapide par équipe (auto-validation)
   document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
     const [team,type]=el.dataset.simple.split("|");

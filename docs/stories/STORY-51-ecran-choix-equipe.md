@@ -32,4 +32,10 @@ STORY-50.
 S — un nouvel écran de rendu + binding, aucune nouvelle logique de données.
 
 ## Note
-Timing de l'animation (2.4s badge + révélation cartes) choisi raisonnablement, pas validé par Romain sur le rendu réel — à ajuster facilement sur retour (durées isolées dans `@keyframes team-badge-seq`/`team-cards-in`, `style.css`). Poids de `fenix-stat-badge.png` (~2,2 Mo) non optimisé — mis en cache par le service worker dès le premier chargement (coût une seule fois), à compresser si Romain le juge utile.
+**Révisée après retour direct de Romain sur le 1er rendu** : badge doublé de taille (`min(82vw,560px)`), animation remplacée (trajet coin-à-coin jugé faible → "pop" central avec rebond élastique + mise au point flou/net, `@keyframes team-badge-pop`). Un bug de mise en page (cartes poussées hors écran par un changement de `position` sur le badge) trouvé et corrigé dans la foulée, cf. `docs/code-review/STORY-48-50-51.md` addendum 2.
+
+Poids de `fenix-stat-badge.png` (~2,2 Mo) non optimisé — mis en cache par le service worker dès le premier chargement (coût une seule fois), à compresser si Romain le juge utile.
+
+**Ajouts hors périmètre initial, ajoutés sur retour direct de Romain** :
+- Logo du header cliquable (`#home-logo-btn`) — retour rapide à l'écran de choix d'équipe, réutilise `switchTeamProfile()`
+- `chooseTeamProfile()` n'appelle plus `checkForResumableMatch()` — le clic sur -18/CF n'est plus jamais interrompu par une proposition de reprise de match
