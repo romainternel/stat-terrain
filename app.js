@@ -53,6 +53,8 @@ function freshState(){
     selectedAction:null,
     season:"2025-2026",
     journee:"J1",
+    championnat:"", // saisie libre, memorisee par equipe (STORY-50) — jamais persiste d'un match a l'autre, cf. risque STORY-49 R1
+    teamProfile:null, // "cf" | "u18" — null tant qu'aucun choix n'a ete fait sur cet appareil (STORY-50/51)
     time:0, running:false, period:1,
     events:[],
     shotOverlay:null,
@@ -85,23 +87,45 @@ function freshState(){
     currentMatchId:null, // uuid du match en cours pour la sync Supabase (généré à la volée, cf. STORY-12)
     resumePrompt:null, // liste des matchs "in_progress" trouvés sur Supabase à la connexion (STORY-14)
     readOnly:false, // true = verrouille la saisie sur cet appareil (regarde sans pouvoir modifier) — overwritten below depuis localStorage
+    historySyncing:false, // true pendant le rapatriement de l'historique archivé (STORY-48)
+    _historySyncedThisLoad:false, // une seule tentative de rapatriement par chargement de page
   };
 }
 
 let S = freshState();
 
 // Load saved data (override defaults if exists)
+// Profil d'equipe (STORY-50) — charge AVANT l'effectif, dont la cle de stockage en depend.
 try {
-  const saved = JSON.parse(localStorage.getItem("hb2_teams"));
-  if(saved){
-    if(saved.home && saved.home.players && saved.home.players.length>0) S.home=saved.home;
-    if(saved.away) S.away=saved.away;
+  const savedProfile = localStorage.getItem("hb2_team_profile");
+  S.teamProfile = (savedProfile==="cf"||savedProfile==="u18") ? savedProfile : null;
+} catch(e){ S.teamProfile=null; }
+function defaultTeamName(){ return S.teamProfile==="u18" ? "FENIX Toulouse -18" : "FENIX Toulouse"; }
+function teamsStorageKey(){ return "hb2_teams_"+(S.teamProfile||"cf"); }
+// Migration one-shot : l'ancienne cle unique hb2_teams devient l'effectif de l'equipe CF
+// (seule equipe qui existait avant l'introduction de -18) — jamais rejouee une fois faite.
+try {
+  if(!localStorage.getItem("hb2_teams_cf") && localStorage.getItem("hb2_teams")){
+    localStorage.setItem("hb2_teams_cf", localStorage.getItem("hb2_teams"));
   }
-  // Migrate: ensure all players have 'selected' field
-  ["home","away"].forEach(side=>{
-    S[side].players.forEach(p=>{ if(p.selected===undefined) p.selected=false; });
-  });
 } catch(e){}
+function loadTeamsForActiveProfile(){
+  try {
+    const saved = JSON.parse(localStorage.getItem(teamsStorageKey()));
+    if(saved && saved.home && saved.home.players && saved.home.players.length>0){
+      S.home=saved.home;
+      S.away=saved.away||{name:"Adversaire",photo:null,players:[],gkId:null};
+    } else {
+      S.home={name:defaultTeamName(),photo:null,players:[],gkId:null};
+      S.away={name:"Adversaire",photo:null,players:[],gkId:null};
+    }
+    // Migrate: ensure all players have 'selected' field
+    ["home","away"].forEach(side=>{
+      S[side].players.forEach(p=>{ if(p.selected===undefined) p.selected=false; });
+    });
+  } catch(e){}
+}
+if(S.teamProfile) loadTeamsForActiveProfile();
 try { S.savedMatches = JSON.parse(localStorage.getItem("hb2_matches"))||[]; } catch(e){}
 try {
   const savedMode = localStorage.getItem("hb2_mode");
@@ -135,7 +159,39 @@ function setShotViewMode(mode){
   try{ localStorage.setItem("hb2_shotview", mode); }catch(e){}
   R();
 }
-function saveTeams(){ localStorage.setItem("hb2_teams",JSON.stringify({home:S.home,away:S.away})); }
+function saveTeams(){ localStorage.setItem(teamsStorageKey(),JSON.stringify({home:S.home,away:S.away})); }
+
+// ─── Choix d'equipe (-18 / CF) — STORY-50/51 ───
+async function chooseTeamProfile(profile){
+  S.teamProfile=profile;
+  try{ localStorage.setItem("hb2_team_profile", profile); }catch(e){}
+  loadTeamsForActiveProfile();
+  R();
+  // rattrape checkForResumableMatch(), saute a l'init tant qu'aucun profil n'etait connu
+  if(S.authOk) await checkForResumableMatch();
+  R();
+}
+function switchTeamProfile(){
+  if(S.readOnly) return;
+  if(S.events.length>0 && !safeConfirm("Changer d'équipe ? Le match en cours sur cet appareil sera abandonné (sauvegarde-le d'abord avec 💾 si besoin).")) return;
+  markMatchFinished(); // l'ancien match ne doit plus apparaître comme "reprenable"
+  S.currentMatchId=null;
+  unsubscribeMatchEvents();
+  S.teamProfile=null;
+  try{ localStorage.removeItem("hb2_team_profile"); }catch(e){}
+  R();
+}
+// Historique des championnats saisis, memorise separement par equipe (STORY-50, remplace
+// la liste figee N1/N2/-18/Amical envisagee initialement — Romain a demande de la saisie
+// libre avec memoire, pas une liste fermee).
+function championnatStorageKey(){ return "hb2_championnats_"+(S.teamProfile||"cf"); }
+function championnatHistory(){ try{ return JSON.parse(localStorage.getItem(championnatStorageKey()))||[]; }catch(e){ return []; } }
+function rememberChampionnat(value){
+  if(!value) return;
+  const list=championnatHistory().filter(v=>v!==value);
+  list.unshift(value);
+  try{ localStorage.setItem(championnatStorageKey(), JSON.stringify(list.slice(0,10))); }catch(e){}
+}
 function saveMatches(){ localStorage.setItem("hb2_matches",JSON.stringify(S.savedMatches)); }
 function setMode(newMode){
   if(newMode===S.mode) return;
@@ -166,7 +222,10 @@ async function checkAuthSession(){
   }catch(e){
     S.authOk=true; // fail-open : jamais bloquer l'usage local sur une erreur réseau/API
   }
-  if(S.authOk) await checkForResumableMatch();
+  // Tant qu'aucun profil d'equipe n'est connu (1er lancement sur cet appareil), impossible de
+  // filtrer correctement par team_profile — l'ecran de choix (STORY-51) s'en charge, puis
+  // chooseTeamProfile() rattrape cet appel lui-meme une fois le profil choisi.
+  if(S.authOk && S.teamProfile) await checkForResumableMatch();
   R();
 }
 
@@ -177,7 +236,7 @@ async function signInShared(password){
   const {error}=await client.auth.signInWithPassword({email:SUPABASE_AUTH_EMAIL,password});
   if(error){ S.authError="Code d'accès incorrect."; R(); return; }
   S.authOk=true;
-  await checkForResumableMatch();
+  if(S.teamProfile) await checkForResumableMatch(); // sinon rattrape par chooseTeamProfile() au choix d'equipe
   R();
 }
 
@@ -186,7 +245,7 @@ async function fetchInProgressMatches(){
   const client=initSupabaseClient();
   if(!client) return [];
   try{
-    const {data,error}=await client.from('matches').select('*').eq('status','in_progress').order('updated_at',{ascending:false});
+    const {data,error}=await client.from('matches').select('*').eq('status','in_progress').eq('team_profile',S.teamProfile||"cf").order('updated_at',{ascending:false});
     if(error||!data) return [];
     return data;
   }catch(e){ return []; }
@@ -233,6 +292,55 @@ function dismissResumePrompt(){
   R();
 }
 
+// ─── Rapatriement de l'historique archivé depuis un autre appareil — STORY-48 ───
+// Contrairement a fetchInProgressMatches() (matchs EN COURS, pour la reprise), ceci couvre les
+// matchs deja TERMINES ("finished") — jamais rapatries avant cette story : renderHistory()/
+// renderBilan() ne lisaient jusqu'ici que dbGetAll() (IndexedDB, strictement local a l'appareil).
+async function fetchMissingArchivedMatches(localMatches){
+  const client=initSupabaseClient();
+  if(!client) return [];
+  const known=new Set(localMatches.map(m=>m.supabaseMatchId).filter(Boolean));
+  try{
+    const {data,error}=await client.from('matches').select('*').eq('status','finished').eq('team_profile',S.teamProfile||"cf").order('updated_at',{ascending:false});
+    if(error||!data) return [];
+    return data.filter(row=>!known.has(row.id));
+  }catch(e){ return []; }
+}
+async function importArchivedMatch(row, idOffset){
+  const client=initSupabaseClient();
+  if(!client) return null;
+  try{
+    const {data:events}=await client.from('match_events').select('*').eq('match_id',row.id);
+    const evts=(events||[]).map(supabaseRowToEvent).sort((a,b)=>(b.period-a.period)||(b.rawTime-a.rawTime));
+    const scoreH=evts.filter(e=>e.team==="home"&&ACTIONS[e.type]?.isGoal).length;
+    const scoreA=evts.filter(e=>e.team==="away"&&ACTIONS[e.type]?.isGoal).length;
+    return {
+      id:Date.now()+idOffset, // evite toute collision si plusieurs imports dans la meme boucle synchrone
+      date:row.updated_at?new Date(row.updated_at).toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"",
+      season:row.season||"", journee:row.journee||"", championnat:row.championnat||"",
+      teamProfile:row.team_profile||"cf",
+      home:{name:row.home_name||"FENIX Toulouse", players:row.home_roster||[], gkId:row.home_gk_id||null},
+      away:{name:row.away_name||"Adversaire", players:row.away_roster||[], gkId:row.away_gk_id||null},
+      events:evts, time:row.time_offset_seconds||0, period:row.period||2,
+      scoreH, scoreA, coachNotes:row.coach_notes||"",
+      supabaseMatchId:row.id,
+    };
+  }catch(e){ return null; }
+}
+// Boucle sequentielle (pas Promise.all) : evite une rafale de requetes simultanees vers Supabase
+// si beaucoup de matchs sont a rapatrier (1ere ouverture de l'ecran sur un nouvel appareil).
+async function syncArchivedMatchesIntoLocal(){
+  const local=await dbGetAll().catch(()=>[]);
+  const missing=await fetchMissingArchivedMatches(local);
+  if(missing.length===0) return 0;
+  let imported=0;
+  for(let i=0;i<missing.length;i++){
+    const m=await importArchivedMatch(missing[i], i);
+    if(m){ await dbSaveMatch(m).catch(()=>{}); imported++; }
+  }
+  return imported;
+}
+
 async function signOutShared(){
   const client=initSupabaseClient();
   if(client){ try{ await client.auth.signOut(); }catch(e){} }
@@ -267,7 +375,7 @@ async function upsertMatchSnapshot(){
   if(!client||!S.currentMatchId) return;
   try{
     const {error}=await client.from('matches').upsert({
-      id:S.currentMatchId, status:'in_progress',
+      id:S.currentMatchId, status:'in_progress', team_profile:S.teamProfile||"cf",
       home_name:S.home.name, away_name:S.away.name,
       home_roster:S.home.players, away_roster:S.away.players,
       home_gk_id:S.home.gkId, away_gk_id:S.away.gkId,
@@ -1306,7 +1414,10 @@ function importMatchCSV(){
 // ─── EXPORT / IMPORT ALL MATCHES ───
 async function exportAllMatches(){
   let matches;
-  try{ matches=await dbGetAll(); }catch(e){ safeAlert("Erreur lecture base"); return; }
+  // Filtre par equipe active (STORY-50) : "Tout exporter" doit rester borne a ce que l'ecran
+  // Matchs affiche reellement, jamais inclure a l'insu de l'utilisateur les matchs de l'autre
+  // equipe (particulierement sensible pour -18, cf. docs/risks/deux-equipes.md R0).
+  try{ const all=await dbGetAll(); matches=all.filter(m=>(m.teamProfile||"cf")===(S.teamProfile||"cf")); }catch(e){ safeAlert("Erreur lecture base"); return; }
   if(matches.length===0){ safeAlert("Aucun match à exporter"); return; }
   
   const SEP=";;;---MATCH_SEPARATOR---;;;";
@@ -1350,7 +1461,9 @@ async function importAllMatches(){
         let count=0;
         for(const block of blocks){
           const lines=block.split("\n").map(l=>l.trim()).filter(l=>l);
-          let match={events:[],home:{name:"?",players:[],gkId:null},away:{name:"?",players:[],gkId:null}};
+          // teamProfile tague sur l'equipe active au moment de l'import (pas un fallback "cf"
+          // par defaut) — un import fait depuis le profil -18 doit rester visible sous -18.
+          let match={events:[],home:{name:"?",players:[],gkId:null},away:{name:"?",players:[],gkId:null},teamProfile:S.teamProfile||"cf"};
           const events=[];
           
           for(const line of lines){
@@ -1387,7 +1500,7 @@ async function importAllMatches(){
           await dbSaveMatch(match);
           count++;
         }
-        S.matchHistory=await dbGetAll();
+        { const all=await dbGetAll(); S.matchHistory=all.filter(m=>(m.teamProfile||"cf")===(S.teamProfile||"cf")); }
         safeAlert(`${count} match(s) importé(s)`);
         R();
       }catch(err){ safeAlert("Erreur d'import: "+err.message); }
@@ -1403,7 +1516,8 @@ async function saveMatch(){
   const match={
     id:Date.now(),
     date:new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}),
-    season:S.season, journee:S.journee,
+    season:S.season, journee:S.journee, championnat:S.championnat||"",
+    teamProfile:S.teamProfile||"cf", // STORY-50 — scope l'historique par equipe
     home:{...S.home,players:S.home.players.map(p=>({...p}))},
     away:{...S.away,players:S.away.players.map(p=>({...p}))},
     events:[...S.events], time:S.time, period:S.period,
@@ -1413,7 +1527,7 @@ async function saveMatch(){
   };
   try{
     await dbSaveMatch(match);
-    const count=await dbGetAll().then(a=>a.length).catch(()=>0);
+    const count=await dbGetAll().then(a=>a.filter(m=>(m.teamProfile||"cf")===(S.teamProfile||"cf")).length).catch(()=>0);
     markMatchFinished();
     safeAlert("✅ Match sauvegardé !\n\n💾 "+count+" match(s) en mémoire.\n\n📥 Pensez à exporter le CSV de temps en temps\n(onglet Matchs → Export CSV)");
   }catch(e){ safeAlert("Erreur de sauvegarde: "+e.message); }
@@ -1425,6 +1539,12 @@ async function markMatchFinishedById(matchId){
   const client=initSupabaseClient();
   if(!client||!matchId) return;
   try{ await client.from('matches').update({status:'finished'}).eq('id',matchId); }catch(e){}
+  // Appel separe, volontairement (STORY-48/49/50) : si season/journee/coach_notes/championnat
+  // n'existent pas encore cote Supabase (migration pas encore executee), PostgREST rejette tout
+  // l'appel pour colonne inconnue — separe du statut 'finished' ci-dessus, un oubli de migration
+  // ne degrade que l'enrichissement, jamais le comportement deja en production (le match qui
+  // arrete de s'afficher comme "reprenable" sur les autres appareils).
+  try{ await client.from('matches').update({season:S.season, journee:S.journee, coach_notes:S.coachNotes||"", championnat:S.championnat||""}).eq('id',matchId); }catch(e){}
 }
 async function markMatchFinished(){ return markMatchFinishedById(S.currentMatchId); }
 
@@ -1454,6 +1574,10 @@ function newMatch(){
   if(S.readOnly) return;
   if(!safeConfirm("Nouveau match ? Les stats en cours seront perdues si non sauvegardées.")) return;
   stopTimer();
+  // Appelé AVANT tout reset ci-dessous : markMatchFinished() pousse season/journee/coach_notes/
+  // championnat encore actuels (STORY-48/49/50) vers l'ancien match Supabase — l'appeler après
+  // les resets lui ferait hériter à tort de la journée/du championnat du PROCHAIN match.
+  markMatchFinished(); // l'ancien match ne doit plus apparaître comme "reprenable" une fois abandonné
   // Increment journée
   const jNum=parseInt(S.journee.replace(/\D/g,""))||0;
   S.events=[]; S.time=0; S.period=1; S.selectedAction=null; S.shotOverlay=null;
@@ -1462,8 +1586,8 @@ function newMatch(){
   S.tmUsed={mt1:0,mt2:0}; S.tmLastAlert=0; S.coachNotes="";
   S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
   S.journee="J"+(jNum+1);
+  S.championnat=""; // reinitialise a chaque match (STORY-50), jamais persiste comme S.season — evite qu'un "Amical" oublie contamine le match suivant
   S.away.name="Adversaire";
-  markMatchFinished(); // l'ancien match ne doit plus apparaître comme "reprenable" une fois abandonné
   S.currentMatchId=null; // nouveau match = nouvel id Supabase, régénéré à la volée au premier événement
   unsubscribeMatchEvents();
   R();
@@ -1524,6 +1648,19 @@ function renderAccessScreen(){
   </div>`;
 }
 
+// Ecran de choix d'equipe (-18 / CF) — STORY-51. Badge FENIX STAT (visuel fourni par Romain,
+// fenix-stat-badge.png) anime en premier depuis un coin puis disparait, revele ensuite les deux
+// cartes de choix — cf. docs/design/deux-equipes.md pour le sequencement exact.
+function renderTeamPicker(){
+  return `<div class="team-picker">
+    <div class="team-picker-badge"><img src="./fenix-stat-badge.png" alt=""></div>
+    <div class="team-picker-cards">
+      <div class="team-picker-card" data-team-profile="u18" style="--tp-accent:var(--purple);">-18</div>
+      <div class="team-picker-card" data-team-profile="cf" style="--tp-accent:var(--fenix-sky);">CF</div>
+    </div>
+  </div>`;
+}
+
 function renderResumePrompt(){
   const ago=(iso)=>{
     const min=Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/60000));
@@ -1572,6 +1709,13 @@ function R(){
       const clone=app.cloneNode(false);
       clone.innerHTML="";
       app.parentNode.replaceChild(clone,app);
+      return;
+    }
+    if(S.authOk && !S.teamProfile){
+      const clone=app.cloneNode(false);
+      clone.innerHTML=renderTeamPicker();
+      app.parentNode.replaceChild(clone,app);
+      bind();
       return;
     }
     if(S.resumePrompt){
@@ -1929,6 +2073,7 @@ function renderMatch(){
       <button class="btn btn-sm ${S.mode==="expert"?"btn-g":""}" style="flex:1;" data-mode="expert">🎯 Expert</button>
     </div>
     <button class="btn btn-sm ${S.readOnly?"btn-g":""}" style="width:100%;border-color:var(--yellow);color:${S.readOnly?"":"var(--yellow)"};" id="readonly-toggle-btn">${S.readOnly?"🔓 Désactiver le mode lecteur":"🔒 Activer le mode lecteur"}</button>
+    <button class="btn btn-sm" style="width:100%;margin-top:5px;border-color:var(--purple);color:var(--purple);" id="switch-team-btn">🔄 Changer d'équipe (actuellement : ${S.teamProfile==="u18"?"-18":"CF"})</button>
 
     ${sbClient?`<div class="settings-group-label">Compte</div>
     <button class="btn btn-sm" style="width:100%;border-color:var(--red);color:var(--red);" id="sign-out-btn">🔒 Se déconnecter</button>`:""}
@@ -1960,10 +2105,14 @@ function renderMatch(){
       </div>
       ${teamBlock("away",sa,aMT1,aMT2,awayGbs,S.away.gkId,aSv,aSh,aAct,"var(--red)",a2m,aRed)}
       <div class="ml-extra">
-        <div style="font-size:10px;color:var(--t3);text-align:center;">
+        <div style="font-size:10px;color:var(--t3);text-align:center;display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">
           <span id="edit-season" style="cursor:pointer;">${S.season}</span>
-          <span style="margin:0 4px;">·</span>
+          <span>·</span>
           <span id="edit-journee" style="cursor:pointer;color:var(--yellow);font-weight:700;">${S.journee}</span>
+          <span>·</span>
+          <input id="edit-championnat" list="championnat-suggestions" value="${S.championnat||""}" placeholder="Championnat"
+            style="width:70px;background:transparent;border:none;color:var(--t3);font:inherit;font-size:10px;text-align:center;padding:0;">
+          <datalist id="championnat-suggestions">${championnatHistory().map(v=>`<option value="${v}">`).join("")}</datalist>
         </div>
       </div>
     </div>
@@ -3903,7 +4052,7 @@ function renderBilanPdf(m){
 
 function renderBilanSaison(){
   const season=S.season;
-  const matches=S.matchHistory.filter(m=>m.season===season);
+  const matches=S.matchHistory.filter(m=>m.season===season && (m.championnat||"").trim().toLowerCase()!=="amical");
   if(matches.length===0) return `<div class="card" style="max-width:700px;margin:0 auto;"><div class="empty" style="padding:20px;text-align:center;color:var(--t3);">Aucun match pour la saison ${season}</div></div>`;
 
   // Aggregate
@@ -4184,6 +4333,7 @@ function renderHistory(){
         <span style="font-size:12px;color:var(--t2);margin-left:4px;">${matches.length} match${matches.length>1?"s":""}</span>
       </div>
     </div>
+    ${S.historySyncing?`<div style="font-size:11px;color:var(--t3);text-align:center;margin-bottom:8px;">🔄 Recherche de matchs sur les autres appareils…</div>`:""}
     ${matches.length===0?`<div class="empty" style="padding:30px;text-align:center;color:var(--t3);">Aucun match sauvegardé.<br><span style="font-size:11px;">Utilise 💾 Sauver dans l'onglet Match pour enregistrer.</span></div>`:""}
     ${seasons.map(season=>`
       <div style="margin-bottom:16px;">
@@ -4193,6 +4343,7 @@ function renderHistory(){
             <div style="flex:1;min-width:0;">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                 <span class="mono" style="font-size:11px;color:var(--yellow);font-weight:700;">${m.journee||"—"}</span>
+                ${m.championnat?`<span class="mono" style="font-size:11px;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.05);color:${m.championnat.trim().toLowerCase()==="amical"?"var(--t3)":"var(--t2)"};">${m.championnat}</span>`:""}
                 <span style="font-size:13px;font-weight:700;color:var(--green)">${m.home?.name||"?"}</span>
                 <span class="mono" style="font-size:15px;font-weight:800;">${m.scoreH??0} - ${m.scoreA??0}</span>
                 <span style="font-size:13px;font-weight:700;color:var(--red)">${m.away?.name||"?"}</span>
@@ -4240,10 +4391,26 @@ function bind(){
   });
   const dismissBtn=document.getElementById("dismiss-resume");
   if(dismissBtn) dismissBtn.onclick=()=>dismissResumePrompt();
+  // Choix d'equipe (-18/CF) — STORY-51
+  document.querySelectorAll("[data-team-profile]").forEach(el=>{
+    el.onclick=()=>{ if(el.dataset.teamProfileBusy) return; el.dataset.teamProfileBusy="1"; chooseTeamProfile(el.dataset.teamProfile); };
+  });
   // Nav
   document.querySelectorAll("[data-v]").forEach(el=>{ el.onclick=async()=>{
     S.view=el.dataset.v;
-    if(S.view==="history"||S.view==="bilan"){ try{S.matchHistory=await dbGetAll();}catch(e){S.matchHistory=[];} }
+    if(S.view==="history"||S.view==="bilan"){
+      try{ const all=await dbGetAll(); S.matchHistory=all.filter(m=>(m.teamProfile||"cf")===(S.teamProfile||"cf")); }catch(e){ S.matchHistory=[]; }
+      if(S.view==="history" && !S._historySyncedThisLoad){
+        S._historySyncedThisLoad=true; // une seule tentative par chargement de page, pas a chaque re-render
+        S.historySyncing=true; R();
+        const n=await syncArchivedMatchesIntoLocal();
+        S.historySyncing=false;
+        if(n>0){
+          try{ const all2=await dbGetAll(); S.matchHistory=all2.filter(m=>(m.teamProfile||"cf")===(S.teamProfile||"cf")); }catch(e){}
+          showToast(`+${n} match(s) récupéré(s) depuis un autre appareil`);
+        }
+      }
+    }
     R();
   }; });
   // Mode Simple/Expert toggle
@@ -4251,6 +4418,9 @@ function bind(){
   // Mode lecteur (verrouillage de la saisie)
   const readOnlyBtn=document.getElementById("readonly-toggle-btn");
   if(readOnlyBtn) readOnlyBtn.onclick=()=>{ setReadOnly(!S.readOnly); };
+  // Changer d'equipe (-18/CF) — STORY-50
+  const switchTeamBtn=document.getElementById("switch-team-btn");
+  if(switchTeamBtn) switchTeamBtn.onclick=()=>{ S.settingsOpen=false; switchTeamProfile(); };
   // Mode Simple: boutons de saisie rapide par équipe (auto-validation)
   document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
     const [team,type]=el.dataset.simple.split("|");
@@ -4567,6 +4737,9 @@ function bind(){
   if(es) es.onclick=()=>{ const v=prompt("Saison :",S.season); if(v!==null){S.season=v.trim()||S.season;R();} };
   const ej=document.getElementById("edit-journee");
   if(ej) ej.onclick=()=>{ const v=prompt("Journée :",S.journee); if(v!==null){S.journee=v.trim()||S.journee;R();} };
+  // Championnat — saisie libre, memorisee par equipe (STORY-50)
+  const ec=document.getElementById("edit-championnat");
+  if(ec) ec.onchange=()=>{ const v=ec.value.trim(); S.championnat=v; rememberChampionnat(v); R(); };
 
   // 2min / Red card badges → open player select
   document.querySelectorAll("[data-badge]").forEach(el=>{
@@ -4593,7 +4766,7 @@ function bind(){
       const m=S.matchHistory.find(x=>x.id===id);
       try{
         await dbDelete(id);
-        S.matchHistory=await dbGetAll();
+        { const all=await dbGetAll(); S.matchHistory=all.filter(x=>(x.teamProfile||"cf")===(S.teamProfile||"cf")); }
         if(m?.supabaseMatchId) deleteSupabaseMatch(m.supabaseMatchId); // best-effort, ne bloque jamais la suppression locale
       }catch(e){ console.error(e); }
       R();

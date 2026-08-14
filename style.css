@@ -47,6 +47,38 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .access-error{font-size:12px;color:var(--red);margin-bottom:12px;}
 .access-submit{width:100%;padding:12px;font-size:15px;}
 
+/* ── CHOIX D'EQUIPE (-18 / CF) — STORY-51 ── */
+/* Sequence : badge FENIX STAT (fourni par Romain) entre depuis un coin, tient, ressort vers le
+   coin oppose et disparait — puis les deux cartes de choix se revelent. */
+.team-picker{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:linear-gradient(160deg,#0A1520 0%,#162030 55%,#0F1923 100%);padding:20px;z-index:1000;overflow:hidden;}
+.team-picker-badge{position:absolute;pointer-events:none;
+  animation:team-badge-seq 2.4s cubic-bezier(.22,.8,.32,1) forwards;}
+.team-picker-badge img{width:min(46vw,260px);display:block;filter:drop-shadow(0 12px 32px rgba(0,0,0,.5));}
+@keyframes team-badge-seq{
+  0%{opacity:0;transform:translate(-42vw,-34vh) scale(.45) rotate(-8deg);}
+  22%{opacity:1;transform:translate(0,0) scale(1) rotate(0deg);}
+  68%{opacity:1;transform:translate(0,0) scale(1) rotate(0deg);}
+  100%{opacity:0;transform:translate(40vw,34vh) scale(.5) rotate(8deg);}
+}
+.team-picker-cards{display:flex;gap:16px;width:100%;max-width:600px;opacity:0;pointer-events:none;
+  animation:team-cards-in .6s ease-out 2s forwards;}
+@media(max-width:600px){ .team-picker-cards{flex-direction:column;} }
+.team-picker-card{flex:1;aspect-ratio:1;max-height:280px;display:flex;align-items:center;justify-content:center;
+  background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r3);box-shadow:var(--shadow-card);
+  color:var(--tp-accent);font-weight:800;font-size:clamp(48px,12vw,96px);cursor:pointer;
+  transition:border-color .15s,box-shadow .15s,transform .1s;}
+.team-picker-card:active{transform:scale(.97);}
+@media(hover:hover){
+  .team-picker-card:hover{border-color:var(--tp-accent);box-shadow:var(--shadow-card-hover),0 0 0 1px var(--tp-accent);}
+}
+@keyframes team-cards-in{from{opacity:0;transform:translateY(16px) scale(.97);}to{opacity:1;transform:none;pointer-events:auto;}}
+@media(prefers-reduced-motion:reduce){
+  .team-picker-badge{animation:none;opacity:1;position:static;margin-bottom:24px;}
+  .team-picker-badge img{width:min(30vw,140px);}
+  .team-picker-cards{animation:none;opacity:1;pointer-events:auto;}
+}
+
 /* ── COMMON ── */
 .card{
   background:var(--card-bg);
