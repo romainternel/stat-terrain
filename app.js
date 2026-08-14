@@ -1532,7 +1532,15 @@ async function saveMatch(){
   try{
     await dbSaveMatch(match);
     const count=await dbGetAll().then(a=>a.filter(m=>(m.teamProfile||"cf")===(S.teamProfile||"cf")).length).catch(()=>0);
-    markMatchFinished();
+    // Auto-reparation (trouve suite a un incident reel, cf. docs/brief-v15-diagnostic-sync-multi-appareil.md) :
+    // markMatchFinishedById() ne fait que des update() -- si la ligne Supabase n'a jamais existe
+    // (ex. toutes les tentatives upsertMatchSnapshot() du match ont echoue silencieusement pour
+    // une raison quelconque, colonne manquante ou reseau), la marquer "finished" est un no-op
+    // silencieux et le match reste coince localement, invisible sur les autres appareils. Un
+    // upsertMatchSnapshot() de secours ici cree la ligne si besoin (upsert, pas update) avant de
+    // la marquer terminee -- rend la sauvegarde auto-reparatrice plutot que de propager l'incident.
+    await upsertMatchSnapshot();
+    await markMatchFinished();
     safeAlert("✅ Match sauvegardé !\n\n💾 "+count+" match(s) en mémoire.\n\n📥 Pensez à exporter le CSV de temps en temps\n(onglet Matchs → Export CSV)");
   }catch(e){ safeAlert("Erreur de sauvegarde: "+e.message); }
   R();
