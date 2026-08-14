@@ -188,8 +188,6 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   .fs-overlay-body>.card.fs-court div[style*="grid-template-columns"]{width:50%!important;max-width:400px!important;font-size:18px!important;}
   .fs-overlay-body>.card.fs-court svg[viewBox="0 0 350 208"]{width:92%!important;max-height:62vh!important;margin:0 auto!important;display:block!important;}
   .fs-overlay-body>.card:not(.fs-court){max-width:88%!important;}
-  .pd-goalzone{width:50%!important;max-width:400px!important;}
-  .pd-court{width:92%!important;}
 }
 .compare-evo-row{display:flex;gap:10px;flex-wrap:wrap;}
 .compare-evo-row>.card{flex:1;min-width:280px;max-width:none!important;margin:0!important;}
@@ -353,6 +351,17 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .gk-filter-select{ background:var(--bg3); border-radius:var(--r1); font-size:12px; font-weight:600;
   padding:5px 8px; min-height:30px; max-width:148px; }
 @media(max-width:700px){ .gk-filter-select{ max-width:130px; } }
+
+/* ── DETAIL JOUEUR EN MODALE COMPACTE (STORY-47) ── */
+/* Reprend .overlay (deja utilise par le shot-modal) comme fond ; .pd-modal
+   porte aussi .card.gk-sheet (bordure teintee par equipe + arrondi deja
+   fournis par ces classes) — pas de border/border-radius ici pour ne pas
+   les ecraser silencieusement selon l'ordre des regles du fichier. */
+.pd-modal{ background:#1A2840; padding:16px; width:min(520px,94vw);
+  max-height:90vh; overflow-y:auto;
+  animation: pd-modal-in .18s ease-out; }
+@keyframes pd-modal-in{ from{ opacity:0; transform:scale(.96); } to{ opacity:1; transform:scale(1); } }
+@media (prefers-reduced-motion: reduce){ .pd-modal{ animation:none; } }
 
 /* ── Bascule points/zones (STORY-43) — reglage global, meme famille visuelle que .st-tab ── */
 .shotview-toggle{ display:inline-flex; gap:2px; background:var(--card); border:1px solid var(--border);

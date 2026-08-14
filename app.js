@@ -2667,66 +2667,71 @@ function renderPlayerDetail(){
     <span style="cursor:pointer;margin-left:8px;color:var(--fenix-sky);text-decoration:underline;" data-pd-clear-sel>✕ tout voir</span>
   </div>`:`<div style="text-align:center;padding:4px;font-size:12px;color:var(--t3);">Clique un tir pour voir sa zone</div>`;
 
-  return `<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;background:var(--bg);z-index:1001;display:flex;flex-direction:column;">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-      <div>
-        <span style="font-size:18px;font-weight:800;color:${color};">${dn}${p.name}</span>
-        <span style="font-size:12px;color:var(--t2);margin-left:8px;">${S[side].name}</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        ${shotViewToggleHtml()}
-        <button class="btn btn-xs" id="close-player-detail" style="border-color:var(--border);color:var(--t2);font-size:16px;">✕ Fermer</button>
-      </div>
-    </div>
-    <div style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,20px);">
-      <div style="display:flex;justify-content:center;gap:16px;padding:8px;">
-        <div style="text-align:center;"><div class="mono" style="font-size:22px;font-weight:800;color:var(--green);">${goals}</div><div style="font-size:10px;color:var(--t2);">BUTS</div></div>
-        <div style="text-align:center;"><div class="mono" style="font-size:22px;font-weight:800;color:var(--yellow);">${assists}</div><div style="font-size:10px;color:var(--t2);">PD</div></div>
-        <div style="text-align:center;"><div class="mono" style="font-size:22px;font-weight:800;color:var(--t2);">${totalShots}</div><div style="font-size:10px;color:var(--t2);">TIRS</div></div>
-        <div style="text-align:center;"><div class="mono" style="font-size:22px;font-weight:800;color:var(--yellow);">${pct}%</div><div style="font-size:10px;color:var(--t2);">EFF.</div></div>
+  const accentRgb = side==="home" ? "95,168,211" : "232,70,90";
+
+  return `<div class="overlay" id="pd-detail-overlay">
+    <div class="pd-modal card gk-sheet" style="--gk-accent-rgb:${accentRgb};">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+        <div>
+          <span style="font-size:18px;font-weight:800;color:${color};">${dn}${p.name}</span>
+          <span style="font-size:12px;color:var(--t2);margin-left:8px;">${S[side].name}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${shotViewToggleHtml()}
+          <button class="btn btn-xs" id="close-player-detail" style="border-color:var(--border);color:var(--t2);font-size:16px;">✕ Fermer</button>
+        </div>
       </div>
       ${selInfo}
-      <div class="pd-layout" style="padding:4px 8px;">
-        <div class="pd-goalzone" style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:1px;width:85%;max-width:600px;margin:0 auto;aspect-ratio:5/2;border-radius:4px 4px 0 0;overflow:hidden;border:2px solid var(--border);border-bottom:3px solid var(--fenix-sky);">
-          ${ZONES.map(z=>{
-            const d=zoneData[z]; const opacity=d.total>0?(.25+.75*(d.total/maxC)):0;
-            const gPct=d.total>0?d.goals/d.total:0;
-            const bg=d.total>0?
-              (gPct>.5?"rgba(80,200,120,"+opacity+")":"rgba(78,205,232,"+opacity+")")
-              :"var(--bg3)";
-            return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';color:'+(d.total>0?"#fff":"var(--t3)")+';font-weight:700;">'+
-              (d.total>0?'<div style="font-size:16px;line-height:1.1;">'+d.goals+'/'+d.total+'</div>':'<div style="font-size:14px;">'+GZ_LABELS[z]+'</div>')+
-              '</div>';
-          }).join("")}
+      <div class="gk-sheet-body">
+        <div class="gk-sheet-nums">
+          <div class="mono gk-lvl1" style="color:var(--green);">${goals}</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-top:2px;">BUTS</div>
+          <div class="mono gk-lvl2" style="color:var(--yellow);margin-top:12px;">${pct}%</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-top:2px;">EFF.</div>
+          <div class="gk-pill-group" style="margin-top:16px;">
+            <span class="gk-pill" style="--gk-pill-rgb:240,199,94;"><span class="gk-pill-dot"></span>${assists} PD</span>
+            <span class="gk-pill" style="--gk-pill-rgb:150,160,175;"><span class="gk-pill-dot"></span>${totalShots} tirs</span>
+          </div>
+        </div>
+        <div class="gk-sheet-court">
+          <div class="pd-goalzone" style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:1px;width:100%;margin:0 auto;aspect-ratio:5/2;border-radius:4px 4px 0 0;overflow:hidden;border:2px solid var(--border);border-bottom:3px solid var(--fenix-sky);">
+            ${ZONES.map(z=>{
+              const d=zoneData[z]; const opacity=d.total>0?(.25+.75*(d.total/maxC)):0;
+              const gPct=d.total>0?d.goals/d.total:0;
+              const bg=d.total>0?
+                (gPct>.5?"rgba(80,200,120,"+opacity+")":"rgba(78,205,232,"+opacity+")")
+                :"var(--bg3)";
+              return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';color:'+(d.total>0?"#fff":"var(--t3)")+';font-weight:700;">'+
+                (d.total>0?'<div style="font-size:16px;line-height:1.1;">'+d.goals+'/'+d.total+'</div>':'<div style="font-size:14px;">'+GZ_LABELS[z]+'</div>')+
+                '</div>';
+            }).join("")}
+          </div>
+          <svg id="pd-court-svg" viewBox="0 0 350 208" class="pd-court" style="width:100%;display:block;margin:6px auto 0;border-radius:6px;border:1px solid var(--border);" xmlns="http://www.w3.org/2000/svg">
+            ${courtSvgMarkup()}
+            ${S.shotViewMode==="zones" ? renderCourtZones(zoneShots, penData) : shots.map((s,i)=>{
+              const c = ACTIONS[s.type].isGoal?"#50C878":ACTIONS[s.type].isSave?"#E84E5E":"#E89A4E";
+              const isSel=selIdx===i;
+              const dimmed=selIdx!=null&&!isSel;
+              const r=isSel?7:4;
+              const op=dimmed?"0.25":"1";
+              const sx=s.x/100*350, sy=s.y/100*208;
+              if(ACTIONS[s.type].isGoal){
+                return '<circle data-pd-shot="'+i+'" cx="'+sx+'" cy="'+sy+'" r="'+r+'" fill="'+c+(isSel?'aa':'66')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1.5)+'" style="opacity:'+op+';cursor:pointer;"/>';
+              }
+              return '<g data-pd-shot="'+i+'" style="opacity:'+op+';cursor:pointer;">'+
+                '<circle cx="'+sx+'" cy="'+sy+'" r="'+r+'" fill="'+c+(isSel?'88':'44')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1)+'"/>'+
+                '<line x1="'+(sx-3)+'" y1="'+(sy-3)+'" x2="'+(sx+3)+'" y2="'+(sy+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
+                '<line x1="'+(sx+3)+'" y1="'+(sy-3)+'" x2="'+(sx-3)+'" y2="'+(sy+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
+                '</g>';
+            }).join("")}
+          </svg>
+          <div style="display:flex;justify-content:center;gap:14px;margin-top:6px;font-size:11px;color:var(--t2);flex-wrap:wrap;">
+            <span><span style="color:#50C878">●</span> But</span>
+            <span><span style="color:var(--red)">✕</span> Arrêté</span>
+            <span><span style="color:var(--orange)">✕</span> Hors cadre</span>
+          </div>
         </div>
       </div>
-      <div style="padding:4px 8px;">
-        <svg id="pd-court-svg" viewBox="0 0 350 208" class="pd-court" style="width:100%;display:block;margin:0 auto;border-radius:6px;border:1px solid var(--border);" xmlns="http://www.w3.org/2000/svg">
-          ${courtSvgMarkup()}
-          ${S.shotViewMode==="zones" ? renderCourtZones(zoneShots, penData) : shots.map((s,i)=>{
-            const c = ACTIONS[s.type].isGoal?"#50C878":ACTIONS[s.type].isSave?"#E84E5E":"#E89A4E";
-            const isSel=selIdx===i;
-            const dimmed=selIdx!=null&&!isSel;
-            const r=isSel?7:4;
-            const op=dimmed?"0.25":"1";
-            const sx=s.x/100*350, sy=s.y/100*208;
-            if(ACTIONS[s.type].isGoal){
-              return '<circle data-pd-shot="'+i+'" cx="'+sx+'" cy="'+sy+'" r="'+r+'" fill="'+c+(isSel?'aa':'66')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1.5)+'" style="opacity:'+op+';cursor:pointer;"/>';
-            }
-            return '<g data-pd-shot="'+i+'" style="opacity:'+op+';cursor:pointer;">'+
-              '<circle cx="'+sx+'" cy="'+sy+'" r="'+r+'" fill="'+c+(isSel?'88':'44')+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2.5:1)+'"/>'+
-              '<line x1="'+(sx-3)+'" y1="'+(sy-3)+'" x2="'+(sx+3)+'" y2="'+(sy+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
-              '<line x1="'+(sx+3)+'" y1="'+(sy-3)+'" x2="'+(sx-3)+'" y2="'+(sy+3)+'" stroke="'+(isSel?'#fff':c)+'" stroke-width="'+(isSel?2:1.5)+'" stroke-linecap="round"/>'+
-              '</g>';
-          }).join("")}
-        </svg>
-        <div style="display:flex;justify-content:center;gap:16px;margin-top:6px;font-size:11px;color:var(--t2);">
-          <span><span style="color:#50C878">●</span> But</span>
-          <span><span style="color:var(--red)">✕</span> Arrêté</span>
-          <span><span style="color:var(--orange)">✕</span> Hors cadre</span>
-        </div>
-      </div>
-      <div style="height:60px;flex-shrink:0;"></div>
     </div>
   </div>`;
 }
