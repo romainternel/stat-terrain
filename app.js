@@ -1151,6 +1151,10 @@ function renderMatchSimple(){
         ${simpleBtn(team,"SAVE","ARRÊT","🧤",accent)}
         ${simpleBtn(team,"OFF","NON CADRÉ","↗",accent)}
       </div>
+      <div style="display:flex;gap:5px;margin-top:5px;">
+        ${simpleBtn(team,"TURNOVER","PB","↩",accent)}
+        ${simpleBtn(team,"FREEKICK","JET FRANC","🔄",accent)}
+      </div>
     </div>`;
   return `
     <div style="background:rgba(240,199,94,.12);border:1.5px solid var(--yellow);border-radius:6px;padding:5px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--yellow);letter-spacing:.06em;margin-bottom:10px;">⚡ MODE SIMPLE ACTIF</div>
