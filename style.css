@@ -48,24 +48,27 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .access-submit{width:100%;padding:12px;font-size:15px;}
 
 /* ── CHOIX D'EQUIPE (-18 / CF) — STORY-51 ── */
-/* Sequence : badge FENIX STAT (fourni par Romain), grand format, jaillit au centre avec un
-   leger rebond ("back-out" easing) et une mise au point (flou -> net), tient, puis se dissipe
-   en avancant legerement vers le spectateur — les deux cartes de choix se revelent ensuite.
-   Remplace la 1ere version (coin a coin, jugee trop petite/faible par Romain). */
+/* Sequence : badge FENIX STAT (fourni par Romain), tres grand format (borne par largeur ET
+   hauteur de viewport pour rester dans le cadre sur iPad/iPhone, quelle que soit l'orientation),
+   entree lente et progressive (mise au point flou->net) avec un tres leger rebond en fin de
+   course, tient, puis se dissipe — les deux cartes de choix se revelent ensuite. */
 .team-picker{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:linear-gradient(160deg,#0A1520 0%,#162030 55%,#0F1923 100%);padding:20px;z-index:1000;overflow:hidden;}
 .team-picker-badge{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;
-  animation:team-badge-pop 2.2s cubic-bezier(.34,1.56,.64,1) forwards;}
-.team-picker-badge img{width:min(82vw,560px);display:block;filter:drop-shadow(0 24px 60px rgba(0,0,0,.6));}
+  animation:team-badge-pop 3.4s cubic-bezier(.19,1,.22,1) forwards;}
+/* min(largeur%, hauteur%, plafond px) : ne deborde jamais du viewport meme sur iPad paysage
+   (court en hauteur) ou iPhone paysage (tres court) — grossit avec l'ecran dans les deux sens. */
+.team-picker-badge img{width:min(92vw,86vh,720px);display:block;filter:drop-shadow(0 24px 60px rgba(0,0,0,.6));}
 @keyframes team-badge-pop{
-  0%{opacity:0;transform:scale(.25);filter:blur(8px);}
-  42%{opacity:1;transform:scale(1.08);filter:blur(0);}
-  58%{transform:scale(1);}
-  82%{opacity:1;transform:scale(1);}
-  100%{opacity:0;transform:scale(1.18);}
+  0%{opacity:0;transform:scale(.3);filter:blur(10px);}
+  55%{opacity:1;transform:scale(1);filter:blur(0);}
+  63%{transform:scale(1.03);}
+  72%{transform:scale(1);}
+  88%{opacity:1;transform:scale(1);}
+  100%{opacity:0;transform:scale(1.12);}
 }
 .team-picker-cards{display:flex;gap:16px;width:100%;max-width:600px;opacity:0;pointer-events:none;
-  animation:team-cards-in .6s ease-out 1.85s forwards;}
+  animation:team-cards-in .6s ease-out 2.9s forwards;}
 @media(max-width:600px){ .team-picker-cards{flex-direction:column;} }
 .team-picker-card{flex:1;aspect-ratio:1;max-height:280px;display:flex;align-items:center;justify-content:center;
   background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r3);box-shadow:var(--shadow-card);

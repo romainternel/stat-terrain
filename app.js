@@ -162,14 +162,15 @@ function setShotViewMode(mode){
 function saveTeams(){ localStorage.setItem(teamsStorageKey(),JSON.stringify({home:S.home,away:S.away})); }
 
 // ─── Choix d'equipe (-18 / CF) — STORY-50/51 ───
-function chooseTeamProfile(profile){
+async function chooseTeamProfile(profile){
   S.teamProfile=profile;
   try{ localStorage.setItem("hb2_team_profile", profile); }catch(e){}
   loadTeamsForActiveProfile();
-  // Volontairement PAS de checkForResumableMatch() ici — retour explicite de Romain : le fait de
-  // cliquer -18/CF ne doit jamais etre interrompu par une proposition de reprise de match. Le
-  // flux normal de reprise (ouverture d'appli sur un appareil qui connait deja son equipe,
-  // checkAuthSession()/signInShared()) reste inchange, non affecte par ce retrait.
+  R();
+  // Retire un temps sur retour de Romain ("le clic -18/CF ne doit pas etre interrompu"), puis
+  // remis : sans ca, aucun moyen de retrouver un match en cours apres avoir choisi son equipe
+  // (2e retour de Romain, "je comprends pas comment je peux revenir sur match en cours").
+  if(S.authOk) await checkForResumableMatch();
   R();
 }
 function switchTeamProfile(){
