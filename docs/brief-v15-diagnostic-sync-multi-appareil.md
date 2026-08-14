@@ -69,3 +69,12 @@ Ajout d'un appel `upsertMatchSnapshot()` (qui fait un vrai `upsert` — crée la
 
 ## Verdict final de ce cycle
 Bug de code réel trouvé (pas seulement un oubli de déploiement) : `saveMatch()` n'avait aucune garantie de créer la ligne Supabase si les upserts précédents avaient échoué pour une raison quelconque — corrigé. **Reste à confirmer par un test avec un match démarré et joué entièrement après ce correctif.**
+
+## 3e round — le match apparaît mais le score ne correspond pas ("1-0" sur iPhone)
+Romain : "Quand je l'enregistre il se met à 1-0 sur mon iphone et ne correspond pas à ce que j'ai sur PC."
+
+**Cause** : les événements (buts, tirs...) transitent par une file d'attente locale (`outbox`, IndexedDB) vidée passivement toutes les 15s (`setInterval(flushOutbox,15000)`) — jamais vidée explicitement par `saveMatch()`. Ce match précis avait tous ses événements bloqués dans cette file depuis la période où `team_profile` manquait (la table `matches` n'existant pas encore pour ce match, la contrainte de clé étrangère de `match_events` rejetait tout). Une fois la ligne `matches` recréée (correctif précédent), la file a commencé à se vider **progressivement** via le cycle de 15s — mais le rapatriement côté iPhone a eu lieu **avant** que tous les événements aient fini de se synchroniser, capturant un état partiel (1 seul but sur plusieurs). Or `fetchMissingArchivedMatches()` déduplique par `supabaseMatchId` — un match déjà connu localement n'est **jamais** revérifié ni remis à jour ensuite, même si la source se complète plus tard. La copie partielle reste donc figée sur iPhone indéfiniment.
+
+**Correctif** : `saveMatch()` vide maintenant explicitement la file (`await flushOutbox()`) avant de marquer le match terminé — ferme la fenêtre de course pour tout nouveau match sauvegardé à partir de maintenant.
+
+**Pour ce match précis déjà importé (incomplet) sur iPhone** : ⚠️ ne pas utiliser le bouton 🗑 sur iPhone sans réfléchir — la suppression locale déclenche aussi une tentative de suppression côté Supabase (même `supabaseMatchId`), ce qui supprimerait la seule copie cloud existante. Cette copie de test n'a pas d'enjeu réel (née pendant la fenêtre de debug) — recommandation : ignorer ce match de test précis, et valider le correctif avec un **match entièrement nouveau** joué de bout en bout maintenant que le fix est en place (le chemin le plus sûr et le plus représentatif d'un usage réel).

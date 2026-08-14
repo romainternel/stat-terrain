@@ -1540,6 +1540,15 @@ async function saveMatch(){
     // upsertMatchSnapshot() de secours ici cree la ligne si besoin (upsert, pas update) avant de
     // la marquer terminee -- rend la sauvegarde auto-reparatrice plutot que de propager l'incident.
     await upsertMatchSnapshot();
+    // Meme logique pour les EVENEMENTS : ils vivent dans une file d'attente locale (outbox,
+    // IndexedDB) videe passivement toutes les 15s (setInterval(flushOutbox,15000)) -- jamais
+    // declenchee explicitement par la sauvegarde jusqu'ici. Incident reel observe : un match
+    // sauvegarde juste apres la creation de la ligne 'matches' (ci-dessus) pouvait se rapatrier
+    // sur un autre appareil AVANT que tous ses evenements aient fini de se vider de la file
+    // (score partiel, ex. "1-0" au lieu du score final) -- et comme fetchMissingArchivedMatches()
+    // deduplique par supabaseMatchId, ce match partiel ne se remettait jamais a jour ensuite.
+    // Vider la file explicitement ici, avant de marquer termine, ferme cette fenetre de course.
+    await flushOutbox();
     await markMatchFinished();
     safeAlert("✅ Match sauvegardé !\n\n💾 "+count+" match(s) en mémoire.\n\n📥 Pensez à exporter le CSV de temps en temps\n(onglet Matchs → Export CSV)");
   }catch(e){ safeAlert("Erreur de sauvegarde: "+e.message); }
