@@ -184,6 +184,9 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .timer-btns{display:flex;gap:4px;justify-content:center;margin-top:5px;}
 .per-btn{padding:3px 10px;border-radius:4px;background:transparent;border:1px solid rgba(255,140,0,.3);
   color:var(--orange);font-size:13px;font-weight:600;margin-bottom:3px;}
+.per-btn.due{border-color:var(--yellow);color:var(--yellow);animation:per-btn-pulse 1.6s ease-in-out infinite;}
+@keyframes per-btn-pulse{0%,100%{box-shadow:0 0 0 rgba(240,199,94,0);}50%{box-shadow:0 0 8px rgba(240,199,94,.5);}}
+@media(prefers-reduced-motion:reduce){.per-btn.due{animation:none;}}
 
 /* Actions strip */
 .actions-strip{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;}
@@ -561,6 +564,25 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   cursor:default;pointer-events:none;
 }
 
+/* ── BANDEAU DE VALIDATION AU LANCEMENT (STORY-53) ── */
+.launch-warning-banner{
+  grid-column:1/-1;
+  background:rgba(240,199,94,.10);border:1px solid rgba(240,199,94,.35);
+  border-radius:8px;padding:8px 12px;margin-bottom:2px;font-size:12px;
+}
+.lwb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-weight:700;color:var(--yellow);}
+.lwb-actions{display:flex;gap:4px;flex-shrink:0;}
+.lwb-btn{width:22px;height:22px;border-radius:5px;border:1px solid rgba(240,199,94,.4);
+  background:transparent;color:var(--yellow);font-size:13px;line-height:1;cursor:pointer;}
+.launch-warning-banner ul{margin:4px 0 0;padding-left:18px;color:var(--t2);}
+.launch-warning-banner li{margin:2px 0;}
+.launch-warning-dot{
+  width:26px;height:26px;border-radius:50%;border:1.5px solid var(--yellow);
+  background:rgba(240,199,94,.15);color:var(--yellow);font-size:13px;cursor:pointer;
+  margin-left:6px;flex-shrink:0;
+}
+
 /* ── MATCH LAYOUT 2-COLONNES ── */
 .match-layout{
   display:grid;
@@ -656,6 +678,12 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .act-h.selected{
   background:rgba(255,255,255,.09);border-color:var(--accent);
   box-shadow:0 0 14px rgba(var(--accent-rgb),.22);}
+.act-h.simple-flash{animation:simple-flash-pop .4s ease-out;}
+@keyframes simple-flash-pop{
+  0%{border-color:var(--accent);box-shadow:0 0 0 rgba(var(--accent-rgb),0);transform:scale(1);}
+  30%{border-color:var(--accent);box-shadow:0 0 18px rgba(var(--accent-rgb),.55);background:rgba(var(--accent-rgb),.18);transform:scale(1.05);}
+  100%{border-color:var(--border);box-shadow:0 0 0 rgba(var(--accent-rgb),0);transform:scale(1);}}
+@media(prefers-reduced-motion:reduce){.act-h.simple-flash{animation:none;border-color:var(--accent);}}
 .act-h-xl{flex:2.4;padding:10px 8px;}
 .act-h-sm{flex:1.1;}
 .ah-icon{font-size:22px;line-height:1;}

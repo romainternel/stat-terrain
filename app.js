@@ -79,6 +79,10 @@ function freshState(){
     gkTimeline:false, // open/close GK timeline overlay
     tmUsed:{mt1:0,mt2:0}, // timeouts used per half (max 2/half, 3 total)
     tmLastAlert:0, // timestamp of last TM suggestion to avoid spam
+    halfTimeLastAlert:0, // timestamp du dernier rappel de mi-temps — volontairement separe de tmLastAlert pour ne pas se bloquer mutuellement
+    launchWarningsCollapsed:false, // bandeau de validation au lancement (STORY-53) reduit en pastille
+    launchWarningsDismissed:false, // bandeau ferme definitivement pour cette session de match
+    simpleFlash:null, // {team,type} — flash de confirmation bref sur le bouton Mode Simple cliqué
     settingsOpen:false,
     coachNotes:"", // coach analysis notes for the match
     mode:"expert", // "simple" | "expert" — overwritten below from localStorage/device detection
@@ -524,7 +528,7 @@ function mergeRemoteMatchSnapshot(row){
   if(row.running && row.last_start_at){
     const elapsed=Math.floor((Date.now()-new Date(row.last_start_at).getTime())/1000);
     S.time=(row.time_offset_seconds||0)+Math.max(0,elapsed);
-    if(!wasRunning){ S.running=true; timerInterval=setInterval(()=>{S.time++;renderTimer();},1000); }
+    if(!wasRunning){ S.running=true; timerInterval=setInterval(()=>{S.time++;checkHalfTimeReminder();renderTimer();},1000); }
   } else {
     S.time=row.time_offset_seconds||0;
     if(wasRunning){ S.running=false; clearInterval(timerInterval); }
@@ -729,7 +733,18 @@ function exportPlayersCSV(side){
 }
 
 let timerInterval=null;
-function startTimer(){ if(S.running||S.readOnly)return; S.running=true; timerInterval=setInterval(()=>{S.time++;renderTimer();},1000); upsertMatchSnapshot(); R();}
+// Rappel de mi-temps — declenche par le tick du chrono (pas par un evenement de saisie comme
+// checkTimeoutAdvisor()/checkGkConsecutiveAlert()) pour fonctionner independamment du mode et
+// meme si aucun evenement n'est saisi pendant un moment. Anti-spam separe de tmLastAlert
+// (ne pas fusionner ces deux timestamps — ils doivent pouvoir alerter independamment).
+function checkHalfTimeReminder(){
+  if(S.period!==1 || S.time<1800) return; // 1800s = 30min reglementaires
+  const now=Date.now();
+  if(now-S.halfTimeLastAlert<120000) return; // repete toutes les 2min (plus insistant qu'un rappel TM ponctuel : l'oubli casse des donnees, pas juste une opportunite manquee)
+  S.halfTimeLastAlert=now;
+  showToast("⏰ Fin de la 1ère mi-temps réglementaire — pense à basculer sur MT2", true);
+}
+function startTimer(){ if(S.running||S.readOnly)return; S.running=true; timerInterval=setInterval(()=>{S.time++;checkHalfTimeReminder();renderTimer();},1000); upsertMatchSnapshot(); R();}
 function stopTimer(){ if(S.readOnly)return; S.running=false; clearInterval(timerInterval); upsertMatchSnapshot(); R();}
 function resetTimer(){ if(S.readOnly)return; stopTimer(); S.time=0; R();}
 function fmtTime(t){ const m=Math.floor(t/60),s=t%60; return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"); }
@@ -1129,6 +1144,10 @@ function recordEvent(type, team, x, y, playerId){
     playerNumber: player ? player.number : null,
   });
   queueEventForSync(S.events[0]);
+  // Auto-switch possession apres tir/PB — meme regle que validateAndClose() (Mode Expert)
+  if(act.isGoal||act.isSave||act.isOff||type==="TURNOVER"){
+    S.possession = team==="home"?"away":"home";
+  }
   S.shotOverlay = null;
   S.selectedAction = null;
   S.playerSelect = null;
@@ -1138,11 +1157,13 @@ function recordEvent(type, team, x, y, playerId){
 }
 
 function renderMatchSimple(){
-  const simpleBtn=(team,type,label,icon,accent)=>`
-    <button class="act-h" data-simple="${team}|${type}" style="flex:1;">
+  const simpleBtn=(team,type,label,icon,accent)=>{
+    const flashed=S.simpleFlash&&S.simpleFlash.team===team&&S.simpleFlash.type===type;
+    return `<button class="act-h ${flashed?"simple-flash":""}" data-simple="${team}|${type}" style="flex:1;">
       <span class="ah-icon" style="color:${accent}">${icon}</span>
       <span class="ah-label" style="color:${accent}">${label}</span>
     </button>`;
+  };
   const teamRow=(team,accent,name)=>`
     <div>
       <div style="font-size:11px;font-weight:700;color:${accent};text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${name}</div>
@@ -1608,7 +1629,8 @@ function newMatch(){
   S.events=[]; S.time=0; S.period=1; S.selectedAction=null; S.shotOverlay=null;
   S.playerSelect=null; S.pendingPlayer=null; S.penResultSelect=null; S.pdSelect=false;
   S.actionPanel=null; S.penMode=false;
-  S.tmUsed={mt1:0,mt2:0}; S.tmLastAlert=0; S.coachNotes="";
+  S.tmUsed={mt1:0,mt2:0}; S.tmLastAlert=0; S.halfTimeLastAlert=0; S.coachNotes="";
+  S.launchWarningsCollapsed=false; S.launchWarningsDismissed=false; S.simpleFlash=null;
   S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
   S.journee="J"+(jNum+1);
   S.championnat=""; // reinitialise a chaque match (STORY-50), jamais persiste comme S.season — evite qu'un "Amical" oublie contamine le match suivant
@@ -1778,9 +1800,10 @@ function R(){
 
 function renderHeader(){
   const views=[{id:"setup",l:"🤾 Équipes"},{id:"match",l:"⚡ Match"},{id:"stats",l:"📊 Stats"},{id:"bilan",l:"📈 Bilan"},{id:"history",l:"📁 Matchs"}];
+  const showWarnDot=S.view==="match" && S.launchWarningsCollapsed && !S.launchWarningsDismissed && launchWarnings().length>0;
   return `<div class="hdr">
     <div class="logo" id="home-logo-btn" style="cursor:pointer;" title="Retour à l'accueil (changer d'équipe)"><div class="logo-i"><img src="${FENIX_LOGO}"></div><div><h1>CF FENIX STAT</h1><small>Toulouse Handball</small></div></div>
-    ${S.view==="match"?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>`:""}
+    ${S.view==="match"?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>${showWarnDot?`<button id="lwb-reopen" class="launch-warning-dot" title="À vérifier avant de commencer">⚠️</button>`:""}`:""}
     <div class="nav">${views.map(v=>`<button class="nav-b ${S.view===v.id?"on":""}" data-v="${v.id}">${v.l}</button>`).join("")}</div>
   </div>`;
 }
@@ -2021,6 +2044,19 @@ function editEvent(idx){
 }
 
 
+// Détection pure des manques au lancement (STORY-53) — aucun effet de bord, lecture seule
+// de S.home/S.away/S.trackGK.
+function launchWarnings(){
+  const warnings=[];
+  if(S.trackGK){
+    if(!S.home.gkId) warnings.push(`GB non sélectionné pour ${S.home.name}`);
+    if(!S.away.gkId) warnings.push(`GB non sélectionné pour ${S.away.name}`);
+  }
+  if(S.home.players.filter(p=>p.selected).length===0) warnings.push(`Aucun effectif sélectionné pour ${S.home.name}`);
+  if(S.away.players.filter(p=>p.selected).length===0) warnings.push(`Aucun effectif sélectionné pour ${S.away.name}`);
+  return warnings;
+}
+
 function renderMatch(){
   const sh=teamScore("home"), sa=teamScore("away");
   const hMT1=periodScore("home",1), hMT2=periodScore("home",2);
@@ -2108,9 +2144,22 @@ function renderMatch(){
 
   const readOnlyBannerHtml=S.readOnly?`<div class="readonly-banner">👁 Mode lecteur — saisie verrouillée</div>`:"";
 
+  const lw=launchWarnings();
+  const launchWarningBannerHtml=(!S.launchWarningsCollapsed && !S.launchWarningsDismissed && lw.length>0)?`<div class="launch-warning-banner">
+    <div class="lwb-head">
+      <span>⚠️ À vérifier avant de commencer</span>
+      <span class="lwb-actions">
+        <button class="lwb-btn" id="lwb-collapse" title="Réduire">–</button>
+        <button class="lwb-btn" id="lwb-dismiss" title="Fermer">✕</button>
+      </span>
+    </div>
+    <ul>${lw.map(w=>`<li>${w}</li>`).join("")}</ul>
+  </div>`:"";
+
   return `
   <div class="match-layout poss-${S.possession} ${S.readOnly?"is-readonly":""}">
     ${readOnlyBannerHtml}
+    ${launchWarningBannerHtml}
     <!-- COLONNE GAUCHE: équipes + timer -->
     <div class="ml-left">
       <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:var(--r2);border:1px solid var(--border);">
@@ -2121,7 +2170,7 @@ function renderMatch(){
       </div>
       ${teamBlock("home",sh,hMT1,hMT2,homeGbs,S.home.gkId,hSv,hSh,hAct,"var(--fenix-sky)",h2m,hRed)}
       <div class="ml-timer">
-        <button class="per-btn" id="per-btn">MT ${S.period}</button>
+        <button class="per-btn ${S.period===1&&S.time>=1800?"due":""}" id="per-btn">MT ${S.period}</button>
         <div class="timer-d mono ${S.running?"run":"stop"}" id="tmr">${fmtTime(S.time)}</div>
         <div class="timer-btns">
           <button class="btn btn-sm ${S.running?"btn-r":"btn-g"}" id="t-toggle" style="flex:1;">${S.running?"⏸ Stop":"▶ Start"}</button>
@@ -2248,7 +2297,7 @@ function renderScoreboard(sh,sa){
       </div>
     </div>
     <div class="timer-w">
-      <button class="per-btn" id="per-btn">MT ${S.period}</button>
+      <button class="per-btn ${S.period===1&&S.time>=1800?"due":""}" id="per-btn">MT ${S.period}</button>
       <div class="timer-d mono ${S.running?"run":"stop"}" id="tmr">${fmtTime(S.time)}</div>
       <div class="timer-btns">
         <button class="btn btn-sm ${S.running?"btn-r":"btn-g"}" id="t-toggle">${S.running?"⏸":"▶"}</button>
@@ -4404,9 +4453,11 @@ function bind(){
   if(launchBtn) launchBtn.onclick=()=>{
     if(!S.currentMatchId) S.currentMatchId=gid();
     subscribeMatchEvents(S.currentMatchId);
+    S.period=1; // securite explicite, meme si deja la valeur par defaut
     upsertMatchSnapshot();
     S.view="match";
     R();
+    startTimer(); // demarre le chrono automatiquement — appele apres R() pour que S.running=true soit deja reflete au premier rendu de l'ecran Match
   };
   document.querySelectorAll("[data-resume-match]").forEach(el=>{
     el.onclick=()=>resumeMatch(el.dataset.resumeMatch);
@@ -4452,7 +4503,12 @@ function bind(){
   // Mode Simple: boutons de saisie rapide par équipe (auto-validation)
   document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
     const [team,type]=el.dataset.simple.split("|");
+    // Flash bref de confirmation (STORY-53/M2) — Mode Simple enregistre l'evenement instantanement,
+    // sans etat "selectionne" persistant comme en Mode Expert (.act-h.selected) : ce flash est le
+    // seul retour visuel confirmant que le clic a bien ete pris en compte.
+    const flashRef=S.simpleFlash={team,type};
     recordEvent(type,team);
+    setTimeout(()=>{ if(S.simpleFlash===flashRef){ S.simpleFlash=null; R(); } }, 400);
   }; });
   // Stats tabs
   document.querySelectorAll("[data-stab]").forEach(el=>{ el.onclick=()=>{S.statsTab=el.dataset.stab;R();}; });
@@ -4686,7 +4742,7 @@ function bind(){
   // Timer
   const tt=document.getElementById("t-toggle"); if(tt) tt.onclick=()=>S.running?stopTimer():startTimer();
   const tr=document.getElementById("t-reset"); if(tr) tr.onclick=resetTimer;
-  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{if(S.readOnly)return;const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;upsertMatchSnapshot();R();};
+  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{if(S.readOnly)return;const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;S.halfTimeLastAlert=0;upsertMatchSnapshot();R();};
 
   // Actions
   document.querySelectorAll("[data-act]").forEach(el=>{ el.onclick=()=>selectAction(el.dataset.act); });
@@ -4743,6 +4799,10 @@ function bind(){
   if(settBtn) settBtn.onclick=()=>{S.settingsOpen=!S.settingsOpen;R();};
   const closeSett=document.getElementById("close-settings");
   if(closeSett) closeSett.onclick=()=>{S.settingsOpen=false;R();};
+  // Bandeau de validation au lancement (STORY-53) — purement de l'affichage
+  const lwCollapse=document.getElementById("lwb-collapse"); if(lwCollapse) lwCollapse.onclick=()=>{S.launchWarningsCollapsed=true;R();};
+  const lwDismiss=document.getElementById("lwb-dismiss"); if(lwDismiss) lwDismiss.onclick=()=>{S.launchWarningsDismissed=true;R();};
+  const lwReopen=document.getElementById("lwb-reopen"); if(lwReopen) lwReopen.onclick=()=>{S.launchWarningsCollapsed=false;R();};
   const ub=document.getElementById("undo-btn"); if(ub) ub.onclick=undoLast;
   const tf=document.getElementById("toggle-feed"); if(tf) tf.onclick=()=>{S.feedOpen=!S.feedOpen;R();};
   const cf=document.getElementById("close-feed"); if(cf) cf.onclick=()=>{S.feedOpen=false;R();};
