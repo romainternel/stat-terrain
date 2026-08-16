@@ -1800,10 +1800,11 @@ function R(){
 
 function renderHeader(){
   const views=[{id:"setup",l:"🤾 Équipes"},{id:"match",l:"⚡ Match"},{id:"stats",l:"📊 Stats"},{id:"bilan",l:"📈 Bilan"},{id:"history",l:"📁 Matchs"}];
-  const showWarnDot=S.view==="match" && S.launchWarningsCollapsed && !S.launchWarningsDismissed && launchWarnings().length>0;
+  const inLiveMatch=S.view==="match" && (!!S.currentMatchId || S.events.length>0);
+  const showWarnDot=inLiveMatch && S.launchWarningsCollapsed && !S.launchWarningsDismissed && launchWarnings().length>0;
   return `<div class="hdr">
     <div class="logo" id="home-logo-btn" style="cursor:pointer;" title="Retour à l'accueil (changer d'équipe)"><div class="logo-i"><img src="${FENIX_LOGO}"></div><div><h1>CF FENIX STAT</h1><small>Toulouse Handball</small></div></div>
-    ${S.view==="match"?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>${showWarnDot?`<button id="lwb-reopen" class="launch-warning-dot" title="À vérifier avant de commencer">⚠️</button>`:""}`:""}
+    ${inLiveMatch?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>${showWarnDot?`<button id="lwb-reopen" class="launch-warning-dot" title="À vérifier avant de commencer">⚠️</button>`:""}`:""}
     <div class="nav">${views.map(v=>`<button class="nav-b ${S.view===v.id?"on":""}" data-v="${v.id}">${v.l}</button>`).join("")}</div>
   </div>`;
 }
@@ -1836,8 +1837,8 @@ function renderSetup(){
     <button onclick="S.trackGK=!S.trackGK;R();" style="padding:4px 14px;border-radius:20px;border:1.5px solid ${S.trackGK?'var(--fenix-sky)':'var(--border)'};background:${S.trackGK?'rgba(123,167,194,.15)':'transparent'};color:${S.trackGK?'var(--fenix-sky)':'var(--t3)'};font-size:13px;font-weight:700;">${S.trackGK?'✓ Activé':'✗ Désactivé'}</button>
   </div>
   ${renderModeToggle()}
-  <div style="text-align:center;margin-top:10px;">
-    <button class="btn btn-g" id="launch-match-btn" style="padding:12px 32px;font-size:14px;border-color:var(--fenix-sky);color:var(--fenix-sky);background:rgba(123,167,194,.08);">▶ Lancer le match</button>
+  <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--t3);">
+    Effectifs prêts ? Direction l'onglet <b style="color:var(--fenix-sky);">⚡ Match</b> pour lancer.
   </div>`;
 }
 
@@ -2057,7 +2058,32 @@ function launchWarnings(){
   return warnings;
 }
 
+// Écran dédié tant qu'aucun match n'est lancé (STORY-54) — évite de pouvoir saisir des
+// actions avant que le chrono/les alertes de lancement ne soient actifs (gap trouvé en marge
+// de STORY-53 : accéder à l'onglet Match sans passer par "Lancer le match" affichait tout de
+// suite l'interface de saisie complète). Reset à null par newMatch(), fixé au clic de lancement.
+function renderMatchLaunch(){
+  const lw=launchWarnings();
+  return `<div class="match-launch">
+    <div class="ml-launch-teams">
+      <span style="color:var(--fenix-sky);">${S.home.name}</span>
+      <span class="ml-launch-vs">vs</span>
+      <span style="color:var(--red);">${S.away.name}</span>
+    </div>
+    <button class="btn btn-g ml-launch-btn" id="launch-match-btn">▶ Lancer le match</button>
+    ${lw.length>0?`<div class="ml-launch-warnings">
+      <div>⚠️ À vérifier avant de commencer</div>
+      <ul>${lw.map(w=>`<li>${w}</li>`).join("")}</ul>
+    </div>`:""}
+  </div>`;
+}
+
 function renderMatch(){
+  // S.events.length===0 en plus de S.currentMatchId : loadMatchAsCurrent() (bouton "📂 Charger"
+  // et raccourci PDF, STORY-36) met currentMatchId a null par securite P0 AVANT de charger un
+  // vrai match archive (evenements deja presents) — sans cette 2e condition, charger un match
+  // archive afficherait a tort cet ecran de lancement au lieu du match reellement charge.
+  if(!S.currentMatchId && S.events.length===0) return renderMatchLaunch();
   const sh=teamScore("home"), sa=teamScore("away");
   const hMT1=periodScore("home",1), hMT2=periodScore("home",2);
   const aMT1=periodScore("away",1), aMT2=periodScore("away",2);

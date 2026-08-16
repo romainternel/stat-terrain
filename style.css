@@ -583,6 +583,25 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   margin-left:6px;flex-shrink:0;
 }
 
+/* ── ÉCRAN DÉDIÉ AVANT LANCEMENT DU MATCH (STORY-54) ── */
+.match-launch{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:24px;padding:64px 20px;min-height:50vh;text-align:center;
+}
+.ml-launch-teams{font-size:20px;font-weight:800;display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;justify-content:center;}
+.ml-launch-vs{color:var(--t3);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;}
+.ml-launch-btn{padding:22px 56px;font-size:20px;font-weight:800;border-radius:16px;
+  border-color:var(--fenix-sky);color:var(--fenix-sky);background:rgba(123,167,194,.10);
+  box-shadow:0 0 0 1px rgba(95,168,211,.25),0 12px 32px rgba(95,168,211,.18);}
+.ml-launch-btn:active{transform:scale(.97);}
+.ml-launch-warnings{
+  max-width:420px;background:rgba(240,199,94,.10);border:1px solid rgba(240,199,94,.35);
+  border-radius:8px;padding:10px 16px;font-size:12px;color:var(--yellow);text-align:left;
+}
+.ml-launch-warnings ul{margin:4px 0 0;padding-left:18px;color:var(--t2);}
+.ml-launch-warnings li{margin:2px 0;}
+
 /* ── MATCH LAYOUT 2-COLONNES ── */
 .match-layout{
   display:grid;
