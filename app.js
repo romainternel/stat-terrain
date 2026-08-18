@@ -1792,6 +1792,12 @@ function R(){
     _rafId=null;
     const app=document.getElementById("app");
     const scrollY=window.scrollY;
+    // #app devient lui-meme le conteneur de scroll (pas window/body) en paysage tablette/desktop
+    // (cf. style.css, @media orientation:landscape/min-width:700px, body{overflow:hidden}) — sans
+    // ceci, chaque re-rendu remet #app.scrollTop a 0 (nouveau noeud via cloneNode) et window.scrollY
+    // seul ne corrige rien puisque ce n'est pas lui qui defile dans ce mode. Capturer/restaurer les
+    // deux ensemble est sans risque : celui qui ne defile pas dans le mode courant vaut deja 0.
+    const appScrollTop=app.scrollTop;
     const feed=app.querySelector(".feed");
     const feedScroll=feed?feed.scrollTop:0;
 
@@ -1845,6 +1851,7 @@ function R(){
     const newFeed=clone.querySelector(".feed");
     if(newFeed) newFeed.scrollTop=feedScroll;
     window.scrollTo(0,scrollY);
+    clone.scrollTop=appScrollTop;
   });
 }
 
