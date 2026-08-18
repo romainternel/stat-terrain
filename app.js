@@ -1962,6 +1962,7 @@ function renderTeamSetup(side){
       <button class="btn btn-xs" data-deselect-all="${side}">✗ Aucun</button>
       <button class="btn btn-xs" style="border-color:var(--fenix-sky);color:var(--fenix-sky);" data-import-text="${side}">📋 Coller</button>
       <button class="btn btn-xs" style="border-color:var(--fenix-sky);color:var(--fenix-sky);" data-import-csv="${side}">📂 CSV</button>
+      ${isHome&&S.teamProfile==="cf"?`<button class="btn btn-xs" style="border-color:var(--yellow);color:var(--yellow);" data-load-fenix-cf title="Recharge la liste officielle FENIX CF (22 joueurs)">⚡ FENIX CF</button>`:""}
       <button class="btn btn-xs" data-export-csv="${side}">📤 Export</button>
       <button class="btn btn-xs btn-r" data-clear-team="${side}">🗑 Vider</button>
     </div>
@@ -4820,6 +4821,19 @@ function bind(){
   // Import CSV file
   document.querySelectorAll("[data-import-csv]").forEach(el=>{
     el.onclick=()=>importFromCSVFile(el.dataset.importCsv);
+  });
+  // Recharge manuelle de l'effectif FENIX CF (STORY-61) — filet de securite si le chargement
+  // automatique au premier lancement (STORY-56) n'a pas eu lieu sur un appareil (ex. version
+  // mise en cache pas encore rafraichie), plutot que de dependre uniquement d'un debug a distance.
+  document.querySelectorAll("[data-load-fenix-cf]").forEach(el=>{
+    el.onclick=()=>{
+      if(!safeConfirm("Recharger la liste officielle FENIX CF (22 joueurs) ? L'effectif actuel de FENIX Toulouse sera remplacé.")) return;
+      const team=defaultFenixCfTeam();
+      S.home.players=team.players;
+      S.home.gkId=team.gkId;
+      saveTeams(); R();
+      safeAlert(team.players.length+" joueurs FENIX CF chargés !");
+    };
   });
   // Import text (paste)
   document.querySelectorAll("[data-import-text]").forEach(el=>{
