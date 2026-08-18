@@ -157,10 +157,12 @@ function defaultAdversaireTeam(){
 // Effectif FENIX CF réel (STORY-56) — même logique de premier-chargement que
 // defaultAdversaireTeam(), mais scopée au profil "cf" (pas de liste fournie pour -18).
 // selected:false par défaut, comme un import CSV classique — au coach de sélectionner qui joue.
+// gkId volontairement laissé à null (contrairement à defaultAdversaireTeam()) : aucun joueur
+// n'est encore sélectionné à ce stade, présélectionner un GB non retenu pour le match serait
+// une donnée fausse dès le départ (cf. STORY-60 — ça désactivait le rappel "GB non choisi").
 function defaultFenixCfTeam(){
   const players=FENIX_CF_ROSTER.map(p=>({id:gid(),name:p.name,number:"",position:p.position,photo:null,selected:false}));
-  const gb=players.find(p=>p.position==="GB");
-  return {name:defaultTeamName(),photo:null,players,gkId:gb?gb.id:null};
+  return {name:defaultTeamName(),photo:null,players,gkId:null};
 }
 
 function loadTeamsForActiveProfile(){
@@ -1206,6 +1208,10 @@ function recordEvent(type, team, x, y, playerId){
   S.playerSelect = null;
   S.pendingPlayer = null;
   S.penResultSelect = null;
+  // Alertes TM conseillé / changez de GB — existaient deja en Mode Expert (validateAndClose()/
+  // validateActionPanel()) mais jamais branchees ici : Mode Simple ne les declenchait jamais.
+  checkGkConsecutiveAlert();
+  checkTimeoutAdvisor();
   R();
 }
 
@@ -2115,11 +2121,17 @@ function editEvent(idx){
 
 // Détection pure des manques au lancement (STORY-53) — aucun effet de bord, lecture seule
 // de S.home/S.away/S.trackGK.
+// Un gkId non-null ne suffit pas : il peut pointer vers un joueur laisse non-selectionne pour
+// CE match (roster par defaut STORY-56, ou simplement deselectionne apres coup) — dans ce cas
+// le rappel doit quand meme s'afficher, sinon il ne se declenche plus jamais (STORY-60).
+function hasValidGk(side){
+  return !!S[side].gkId && S[side].players.some(p=>p.id===S[side].gkId && p.selected);
+}
 function launchWarnings(){
   const warnings=[];
   if(S.trackGK){
-    if(!S.home.gkId) warnings.push(`GB non sélectionné pour ${S.home.name}`);
-    if(!S.away.gkId) warnings.push(`GB non sélectionné pour ${S.away.name}`);
+    if(!hasValidGk("home")) warnings.push(`GB non sélectionné pour ${S.home.name}`);
+    if(!hasValidGk("away")) warnings.push(`GB non sélectionné pour ${S.away.name}`);
   }
   if(S.home.players.filter(p=>p.selected).length===0) warnings.push(`Aucun effectif sélectionné pour ${S.home.name}`);
   if(S.away.players.filter(p=>p.selected).length===0) warnings.push(`Aucun effectif sélectionné pour ${S.away.name}`);
@@ -4777,6 +4789,10 @@ function bind(){
       const p = S[side].players.find(pl=>pl.id===pid);
       if(!p) return;
       p.selected = !p.selected;
+      // Le GB assigne ne peut pas rester un joueur non retenu pour le match (integrite des
+      // stats GB en jeu, cf. STORY-60) — force a re-choisir plutot que de garder une reference
+      // fantome silencieuse.
+      if(!p.selected && S[side].gkId===pid) S[side].gkId=null;
       saveTeams(); upsertMatchSnapshot(); R();
     };
   });
