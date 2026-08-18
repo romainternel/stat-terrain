@@ -3,6 +3,34 @@
 // ═══════════════════════════════════════════════════════
 const POSITIONS=["GB","ALG","ARG","DC","PVT","ARD","ALD","?"];
 const POS_L={GB:"Gardien",ALG:"Ailier G",ARG:"Arrière G",DC:"Demi-centre",PVT:"Pivot",ARD:"Arrière D",ALD:"Ailier D","?":"Inconnu"};
+// Effectif FENIX CF (STORY-56) — liste fournie par Romain (joueurs.csv), prénom + initiale nom
+// (format volontairement choisi par le club, pas une troncature de ma part). Pas de numéro
+// fourni. Chargé automatiquement une seule fois (premier lancement sur un appareil sans effectif
+// CF déjà sauvegardé) — jamais réappliqué ensuite, cf. loadTeamsForActiveProfile().
+const FENIX_CF_ROSTER=[
+  {name:"Isaac.M",position:"ALG"},
+  {name:"Hailé.G",position:"ALG"},
+  {name:"Julien.L",position:"ALG"},
+  {name:"Siméo.R",position:"ARG"},
+  {name:"Marius.C",position:"ARG"},
+  {name:"Jules.G",position:"DC"},
+  {name:"Issa.S",position:"DC"},
+  {name:"Leni.A",position:"DC"},
+  {name:"Lucas.G",position:"DC"},
+  {name:"Antonin.V",position:"DC"},
+  {name:"Mattéo.A",position:"ARD"},
+  {name:"Louis.M",position:"ARD"},
+  {name:"Simon.D",position:"ARD"},
+  {name:"Zach.D",position:"ALD"},
+  {name:"Roman.L",position:"ALD"},
+  {name:"Loevan.R",position:"ALD"},
+  {name:"Idris.F",position:"PVT"},
+  {name:"Lukas.J-A",position:"PVT"},
+  {name:"Yoran.C",position:"PVT"},
+  {name:"Gabin.S",position:"GB"},
+  {name:"Noah.O",position:"GB"},
+  {name:"Enzo.D",position:"GB"},
+];
 // Court position coordinates (% of court width/height), goal is at TOP.
 // anchor:"left"/"right" fait affleurer le BORD de l'encart joueur (pas son centre)
 // sur la ligne de touche correspondante, quelle que soit sa largeur — cf. cpBoxStyle().
@@ -126,6 +154,14 @@ function defaultAdversaireTeam(){
   const gb=players.find(p=>p.position==="GB");
   return {name:"Adversaire",photo:null,players,gkId:gb?gb.id:null};
 }
+// Effectif FENIX CF réel (STORY-56) — même logique de premier-chargement que
+// defaultAdversaireTeam(), mais scopée au profil "cf" (pas de liste fournie pour -18).
+// selected:false par défaut, comme un import CSV classique — au coach de sélectionner qui joue.
+function defaultFenixCfTeam(){
+  const players=FENIX_CF_ROSTER.map(p=>({id:gid(),name:p.name,number:"",position:p.position,photo:null,selected:false}));
+  const gb=players.find(p=>p.position==="GB");
+  return {name:defaultTeamName(),photo:null,players,gkId:gb?gb.id:null};
+}
 
 function loadTeamsForActiveProfile(){
   try {
@@ -134,7 +170,7 @@ function loadTeamsForActiveProfile(){
       S.home=saved.home;
       S.away=saved.away||defaultAdversaireTeam();
     } else {
-      S.home={name:defaultTeamName(),photo:null,players:[],gkId:null};
+      S.home = S.teamProfile==="cf" ? defaultFenixCfTeam() : {name:defaultTeamName(),photo:null,players:[],gkId:null};
       S.away=defaultAdversaireTeam();
     }
     // Migrate: ensure all players have 'selected' field
