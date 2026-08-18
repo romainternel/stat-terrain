@@ -885,11 +885,13 @@ function clickActionPlayer(playerId){
       S.actionPanel={type:null, team, shooterId:playerId, pdId:null, mapX:null, mapY:null, goalZone:null};
       R(); return;
     }
-    // Shot actions (GOAL/SAVE/OFF): switch to position or goal zone mode
-    if(act.isGoal||act.isSave||act.isOff){
+    // Actions nécessitant un tag sur le terrain (GOAL/SAVE/OFF/TURNOVER/FREEKICK) : passe à
+    // l'étape terrain plutôt que de valider tout de suite — sinon impossible de taguer
+    // l'emplacement pour un PB/Jet franc (needsMap était vrai mais jamais exploité ici).
+    if(act.needsMap){
       R(); return; // renderMatchPanel handles the next step display
     }
-    // All other actions: instant validate after player tap
+    // Actions sans terrain (2min/carton/TM/PEN déjà gérés ailleurs) : instant validate
     validateAndClose(); R(); return;
   } else if(ap.shooterId===playerId){
     ap.shooterId=null;
@@ -916,8 +918,9 @@ function clickCourtPosition(x,y){
   const ap=S.actionPanel; if(!ap||!ap.shooterId) return;
   const act=ACTIONS[ap.type];
   ap.mapX=x; ap.mapY=y;
-  // Tir non cadré : pas de zone de but à demander, il n'y a pas d'impact dans le but par définition
-  if(!S.trackGK || act.isOff){ validateAndClose(); }
+  // Zone d'impact dans le but demandée uniquement pour un tir cadré (but/arrêt) — tir non cadré,
+  // PB et jet franc n'ont pas de zone de but par définition, validation immédiate après le tag.
+  if(!S.trackGK || !(act.isGoal||act.isSave)){ validateAndClose(); }
   R();
 }
 
@@ -1207,9 +1210,12 @@ function recordEvent(type, team, x, y, playerId){
 }
 
 function renderMatchSimple(){
+  // Un seul côté a la balle à la fois (S.possession) — l'autre reste visible mais grisé et
+  // bloqué au clic (cf. bind()), pour éviter les mistags "l'équipe sans le ballon marque".
   const simpleBtn=(team,type,label,icon,accent)=>{
     const flashed=S.simpleFlash&&S.simpleFlash.team===team&&S.simpleFlash.type===type;
-    return `<button class="act-h ${flashed?"simple-flash":""}" data-simple="${team}|${type}" style="flex:1;">
+    const inactive=team!==S.possession;
+    return `<button class="act-h ${flashed?"simple-flash":""} ${inactive?"simple-inactive":""}" data-simple="${team}|${type}" style="flex:1;">
       <span class="ah-icon" style="color:${accent}">${icon}</span>
       <span class="ah-label" style="color:${accent}">${label}</span>
     </button>`;
@@ -1968,7 +1974,10 @@ function renderMatchPanel(){
   const act=ap?ACTIONS[ap.type]:null;
   const shooter=ap&&ap.shooterId?S[team].players.find(p=>p.id===ap.shooterId):null;
 
-  const shotAction=act&&(act.isGoal||act.isSave||act.isOff);
+  // needsMap couvre GOAL/SAVE/OFF mais aussi TURNOVER/FREEKICK (PB/jet franc) — sans quoi ces
+  // deux derniers n'atteignaient jamais l'étape terrain (auto-validés au tap joueur, cf. bug
+  // remonté par Romain : impossible de taguer l'emplacement d'un PB).
+  const shotAction=act&&act.needsMap;
   // Shot position required for both teams
   const shotMode=ap&&ap.shooterId&&shotAction;
 
@@ -2012,7 +2021,9 @@ function renderMatchPanel(){
 function renderShotCourt(ap, act){
   const GOAL_ZONES=["HG","HC","HD","MG","MC","MD","BG","BC","BD"];
   const GZ_LABELS={HG:"↖",HC:"↑",HD:"↗",MG:"←",MC:"●",MD:"→",BG:"↙",BC:"↓",BD:"↘"};
-  const showGZ=S.trackGK&&ap.mapX!=null&&!act.isOff;
+  // Zone d'impact dans le but réservée aux vrais tirs cadrés (but/arrêt) — PB et jet franc
+  // (comme tir non cadré) valident directement après le tag de position, pas de zone de but.
+  const showGZ=S.trackGK&&ap.mapX!=null&&(act.isGoal||act.isSave);
   return `<div class="court-pick" style="cursor:${showGZ?"default":"crosshair"};">
     <svg class="court-svg-bg" viewBox="0 0 350 208" preserveAspectRatio="none">${courtSvgMarkup()}</svg>
     ${ap.mapX!=null?`<div style="position:absolute;left:${ap.mapX}%;top:${ap.mapY}%;transform:translate(-50%,-50%);font-size:20px;color:#FFF;pointer-events:none;text-shadow:0 0 6px #000;z-index:6;">✕</div>`:""}
@@ -4586,6 +4597,13 @@ function bind(){
   // Mode Simple: boutons de saisie rapide par équipe (auto-validation)
   document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
     const [team,type]=el.dataset.simple.split("|");
+    // Seule l'equipe en possession peut enregistrer une action (retour de Romain : on pouvait
+    // jusqu'ici tagger n'importe quelle equipe meme sans le ballon) — bloque et alerte plutot
+    // que d'enregistrer, ne jamais se contenter d'un simple visuel grise.
+    if(team!==S.possession){
+      showToast("⚠️ "+S[team].name+" n'a pas la possession", true);
+      return;
+    }
     // Flash bref de confirmation (STORY-53/M2) — Mode Simple enregistre l'evenement instantanement,
     // sans etat "selectionne" persistant comme en Mode Expert (.act-h.selected) : ce flash est le
     // seul retour visuel confirmant que le clic a bien ete pris en compte.

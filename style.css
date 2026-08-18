@@ -627,13 +627,13 @@ button:focus-visible, input:focus-visible, select:focus-visible{
   flex:1;display:flex;flex-direction:column;
 }
 .ml-team-active.ml-team-home{
-  border-color:var(--fenix-sky);
-  background:rgba(95,168,211,.09);
-  box-shadow:0 0 0 1px rgba(95,168,211,.22),0 4px 20px rgba(95,168,211,.10);}
+  border-color:var(--fenix-sky);border-width:3px;
+  background:rgba(95,168,211,.18);
+  box-shadow:0 0 0 2px rgba(95,168,211,.35),0 6px 28px rgba(95,168,211,.30),inset 0 0 20px rgba(95,168,211,.08);}
 .ml-team-active.ml-team-away{
-  border-color:var(--red);
-  background:rgba(232,70,90,.09);
-  box-shadow:0 0 0 1px rgba(232,70,90,.22),0 4px 20px rgba(232,70,90,.10);}
+  border-color:var(--red);border-width:3px;
+  background:rgba(232,70,90,.18);
+  box-shadow:0 0 0 2px rgba(232,70,90,.35),0 6px 28px rgba(232,70,90,.30),inset 0 0 20px rgba(232,70,90,.08);}
 .mlt-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;}
 .mlt-name{font-size:16px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;}
 .mlt-detail{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-top:1px;}
@@ -697,6 +697,9 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .act-h.selected{
   background:rgba(255,255,255,.09);border-color:var(--accent);
   box-shadow:0 0 14px rgba(var(--accent-rgb),.22);}
+/* Mode Simple : equipe sans la possession, boutons grises mais toujours cliquables (le clic
+   declenche un message d'erreur plutot qu'un blocage silencieux, cf. bind() [data-simple]) */
+.act-h.simple-inactive{opacity:.4;}
 .act-h.simple-flash{animation:simple-flash-pop .4s ease-out;}
 @keyframes simple-flash-pop{
   0%{border-color:var(--accent);box-shadow:0 0 0 rgba(var(--accent-rgb),0);transform:scale(1);}
@@ -744,13 +747,13 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .mlt-poss-btn .poss-icon{font-size:20px;line-height:1;}
 .mlt-poss-btn .poss-label{font-size:9px;letter-spacing:.12em;}
 .mlt-poss-home.mlt-poss-active{
-  border-color:var(--fenix-sky);background:rgba(95,168,211,.15);color:var(--fenix-sky);
-  box-shadow:0 0 0 1px rgba(95,168,211,.28),0 0 18px rgba(95,168,211,.20),inset 0 0 12px rgba(95,168,211,.07);}
-.mlt-poss-home.mlt-poss-active .poss-icon{font-size:26px;text-shadow:0 0 12px rgba(95,168,211,.6);}
+  border-color:var(--fenix-sky);border-width:2px;background:rgba(95,168,211,.22);color:var(--fenix-sky);
+  box-shadow:0 0 0 2px rgba(95,168,211,.35),0 0 24px rgba(95,168,211,.30),inset 0 0 14px rgba(95,168,211,.10);}
+.mlt-poss-home.mlt-poss-active .poss-icon{font-size:26px;text-shadow:0 0 14px rgba(95,168,211,.8);}
 .mlt-poss-away.mlt-poss-active{
-  border-color:var(--red);background:rgba(232,70,90,.15);color:var(--red);
-  box-shadow:0 0 0 1px rgba(232,70,90,.28),0 0 18px rgba(232,70,90,.20),inset 0 0 12px rgba(232,70,90,.07);}
-.mlt-poss-away.mlt-poss-active .poss-icon{font-size:26px;text-shadow:0 0 12px rgba(232,70,90,.6);}
+  border-color:var(--red);border-width:2px;background:rgba(232,70,90,.22);color:var(--red);
+  box-shadow:0 0 0 2px rgba(232,70,90,.35),0 0 24px rgba(232,70,90,.30),inset 0 0 14px rgba(232,70,90,.10);}
+.mlt-poss-away.mlt-poss-active .poss-icon{font-size:26px;text-shadow:0 0 14px rgba(232,70,90,.8);}
 
 /* Settings panel */
 .settings-panel{position:fixed;bottom:20px;right:20px;background:var(--bg2);
