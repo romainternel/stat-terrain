@@ -113,15 +113,29 @@ try {
     localStorage.setItem("hb2_teams_cf", localStorage.getItem("hb2_teams"));
   }
 } catch(e){}
+// Effectif "adversaire" par défaut : une place par poste, nom = code de poste (ALG/ARG/DC/
+// PVT/ARD/ALD/GB) — volontairement pas des "?" à renommer : Romain lit directement le poste sur
+// le terrain pendant le match si l'adversaire n'est pas connu à l'avance, sans avoir à renommer
+// qui que ce soit. Toujours 7 places pré-sélectionnées (prêtes pour le terrain), éditables/
+// renommables/complétables normalement comme n'importe quel effectif.
+function defaultAdversairePlayers(){
+  return POSITIONS.filter(p=>p!=="?").map(pos=>({id:gid(),name:pos,number:"",position:pos,photo:null,selected:true}));
+}
+function defaultAdversaireTeam(){
+  const players=defaultAdversairePlayers();
+  const gb=players.find(p=>p.position==="GB");
+  return {name:"Adversaire",photo:null,players,gkId:gb?gb.id:null};
+}
+
 function loadTeamsForActiveProfile(){
   try {
     const saved = JSON.parse(localStorage.getItem(teamsStorageKey()));
     if(saved && saved.home && saved.home.players && saved.home.players.length>0){
       S.home=saved.home;
-      S.away=saved.away||{name:"Adversaire",photo:null,players:[],gkId:null};
+      S.away=saved.away||defaultAdversaireTeam();
     } else {
       S.home={name:defaultTeamName(),photo:null,players:[],gkId:null};
-      S.away={name:"Adversaire",photo:null,players:[],gkId:null};
+      S.away=defaultAdversaireTeam();
     }
     // Migrate: ensure all players have 'selected' field
     ["home","away"].forEach(side=>{
@@ -1634,7 +1648,7 @@ function newMatch(){
   S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
   S.journee="J"+(jNum+1);
   S.championnat=""; // reinitialise a chaque match (STORY-50), jamais persiste comme S.season — evite qu'un "Amical" oublie contamine le match suivant
-  S.away.name="Adversaire";
+  S.away=defaultAdversaireTeam(); // nouvel adversaire a chaque match — repart du modele 7 postes, jamais l'ancien effectif renomme du match precedent
   S.currentMatchId=null; // nouveau match = nouvel id Supabase, régénéré à la volée au premier événement
   unsubscribeMatchEvents();
   R();
