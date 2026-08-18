@@ -20,3 +20,6 @@ Profil "cf" avec effectif vide → bouton présent, clic → 22 joueurs chargés
 
 ## Taille
 XS — 1 bouton conditionnel + 1 handler réutilisant une fonction existante.
+
+## Addendum — bouton symétrique côté Adversaire
+Demande immédiate de suivi : "il me faut idem pour adversaire". Bouton `⚡ Modèle` ajouté dans `renderTeamSetup("away")`, visible sur les deux profils (pas seulement "cf" — le modèle 7 postes n'est pas spécifique à une équipe FENIX). Réutilise `defaultAdversairePlayers()` (pas `defaultAdversaireTeam()`) pour ne remplacer que `players`/`gkId`, **sans jamais toucher `S.away.name`** — un nom d'adversaire déjà saisi (ex. "Ivry") ne doit pas être écrasé par un rechargement du modèle. Vérifié par CDP : nom conservé après clic, effectif remplacé par les 7 postes, un seul bouton présent (jamais dupliqué côté FENIX), capture d'écran confirmant le placement symétrique des deux boutons.

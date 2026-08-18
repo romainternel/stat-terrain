@@ -1963,6 +1963,7 @@ function renderTeamSetup(side){
       <button class="btn btn-xs" style="border-color:var(--fenix-sky);color:var(--fenix-sky);" data-import-text="${side}">📋 Coller</button>
       <button class="btn btn-xs" style="border-color:var(--fenix-sky);color:var(--fenix-sky);" data-import-csv="${side}">📂 CSV</button>
       ${isHome&&S.teamProfile==="cf"?`<button class="btn btn-xs" style="border-color:var(--yellow);color:var(--yellow);" data-load-fenix-cf title="Recharge la liste officielle FENIX CF (22 joueurs)">⚡ FENIX CF</button>`:""}
+      ${!isHome?`<button class="btn btn-xs" style="border-color:var(--yellow);color:var(--yellow);" data-load-adversaire-template title="Recharge le modèle 7 postes (ALG/ARG/DC/PVT/ARD/ALD/GB)">⚡ Modèle</button>`:""}
       <button class="btn btn-xs" data-export-csv="${side}">📤 Export</button>
       <button class="btn btn-xs btn-r" data-clear-team="${side}">🗑 Vider</button>
     </div>
@@ -4833,6 +4834,19 @@ function bind(){
       S.home.gkId=team.gkId;
       saveTeams(); R();
       safeAlert(team.players.length+" joueurs FENIX CF chargés !");
+    };
+  });
+  // Meme filet de securite cote Adversaire (STORY-61 bis) — ne touche jamais S.away.name
+  // (contrairement a defaultAdversaireTeam(), pour ne pas ecraser un nom d'adversaire deja saisi).
+  document.querySelectorAll("[data-load-adversaire-template]").forEach(el=>{
+    el.onclick=()=>{
+      if(!safeConfirm("Recharger le modèle adversaire (7 postes) ? L'effectif actuel sera remplacé.")) return;
+      const players=defaultAdversairePlayers();
+      const gb=players.find(p=>p.position==="GB");
+      S.away.players=players;
+      S.away.gkId=gb?gb.id:null;
+      saveTeams(); R();
+      safeAlert(players.length+" postes adversaire chargés !");
     };
   });
   // Import text (paste)
