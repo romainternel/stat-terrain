@@ -1,46 +1,32 @@
-# Brief — Corrections Audit Final (2026-08-20) + Mode Simple à équipe unique
+# Brief — Correctif synchronisation : match archivé rechargé puis modifié
 
 ## Contexte
-Deux sources convergent vers ce cycle :
-1. L'Audit Final du 2026-08-20 (`docs/audit-final/AUDIT-2026-08-20.md`) a trouvé 1 bug Gênant (pas de Bloquant) et proposé 2 suggestions, toutes acceptées par Romain pour correction.
-2. Romain a lui-même identifié, en marge de l'audit, un vrai problème d'usage sur l'écran Match en Mode Simple sur téléphone : les boutons de résultat sont dupliqués (une rangée par équipe, FENIX puis Adversaire empilées), ce qui prend deux fois l'espace vertical nécessaire sur un écran déjà contraint.
-
-Pourquoi maintenant : le Mode Simple existe depuis STORY-23/24 et a été pensé "iPhone-first" (détection auto sous 700px), mais son layout actuel n'a jamais remis en cause le principe "une rangée par équipe" hérité du Mode Expert (qui, lui, affiche forcément les deux équipes côte à côte car le workflow est différent). Romain l'utilise en conditions réelles depuis plusieurs matchs et remonte maintenant ce retour terrain.
+Trouvé par le QA pendant le cycle `/verifie` de STORY-62-65 (`docs/qa/QA-62-65-corrections-audit-et-mode-simple.md`), en dehors du périmètre de ces 4 stories — sujet distinct, cadré par le QA lui-même avec la root cause déjà identifiée par lecture de code. Demande explicite de Romain de le corriger maintenant.
 
 ## Problème
-**Aujourd'hui, sans ces corrections :**
-- Un coach qui sauvegarde un match par réflexe en cours de partie puis re-sauvegarde en fin de match crée deux entrées distinctes dans l'historique — sans le savoir, sans message d'avertissement. Bilan → Saison compte alors un match en trop (victoire/défaite en double).
-- Les alertes critiques en plein match (buts consécutifs, TM conseillé) s'affichent 2,5 à 4 secondes puis disparaissent sans laisser de trace. Un coach qui a les yeux sur le terrain au mauvais moment les rate intégralement — contrairement au bandeau de rappel GB (STORY-53) qui lui reste affiché.
-- L'analyse automatique de fin de match tient un discours de jugement ("jeu trop individuel") même sur un échantillon d'événements minuscule (match écourté, mi-temps interrompue), ce qui n'a pas de sens statistique et peut être perçu comme un jugement hâtif par le coach qui le lit ou le montre aux joueurs.
-- En Mode Simple sur téléphone, la moitié de l'écran de saisie est occupée par les boutons de l'équipe qui n'a **pas** la balle — grisés, non cliquables, mais toujours présents et prenant de la place. Le coach doit descendre/remonter dans l'écran plus que nécessaire pour saisir vite, alors que la saisie rapide est justement la raison d'être du Mode Simple.
+Un coach recharge un match déjà archivé (bouton "📂 Charger", écran Matchs — par exemple pour corriger un événement oublié après coup) puis continue à saisir de nouveaux événements **sans relancer le match**. Chaque nouvel événement échoue silencieusement à se synchroniser vers Supabase : `queueEventForSync()` régénère un `S.currentMatchId` (puisque `loadMatchAsCurrent()` l'avait remis à `null`, comportement voulu par STORY-36 pour éviter d'écrire sur le mauvais match Supabase) mais **n'appelle jamais `upsertMatchSnapshot()`** pour créer la ligne `matches` correspondante — contrairement au bouton "▶ Lancer le match" qui le fait toujours. L'événement peut alors se retrouver écrit côté `match_events` sans ligne `matches` parente, et les tentatives de synchronisation suivantes échouent en boucle (erreur 409, retentée toutes les 15s par `flushOutbox()`).
+
+Aujourd'hui, sans ce correctif : la saisie locale reste correcte (principe fail-open respecté, rien de visible ne casse pour le coach), mais les corrections apportées à un match rechargé ne se propagent jamais de façon fiable aux autres appareils — un autre appareil qui rouvrirait ce même match ne verrait pas les événements ajoutés après coup.
 
 ## Utilisateurs
-Romain (et tout aidant occasionnel amené à saisir), en bord de terrain, un œil sur le match et un doigt sur l'écran — le contexte d'usage exact documenté dans `CLAUDE.md` pour le Mode Simple : iPhone en priorité, saisie one-handed, sous contrainte de temps réelle (le jeu continue pendant la saisie).
+Romain (ou un aidant occasionnel) sur iPad/iPhone, en train de corriger un match archivé après coup — un scénario plus rare que la saisie en direct pendant un match, mais réel (ex. un événement oublié pendant le match, repéré en revoyant le Bilan).
 
 ## Vision
-Fiabiliser deux points de fond découverts par l'audit sans changer le comportement visible ailleurs, et réduire de moitié l'espace vertical occupé par la zone de saisie du Mode Simple en n'affichant que les boutons de l'équipe qui a effectivement la balle — la bascule d'équipe devient un simple changement de libellé/couleur, pas un nouveau geste à apprendre.
+Qu'ajouter un événement à un match rechargé se synchronise aussi fiablement que la saisie d'un match qu'on vient de lancer — sans geste supplémentaire pour le coach, sans qu'il ait besoin de savoir que ce chemin existe.
 
 ## Scope
 
 **Dans le scope :**
-1. `saveMatch()` met à jour la sauvegarde locale existante de la session en cours plutôt que d'en créer une nouvelle à chaque clic.
-2. Les alertes critiques (TM conseillé, changez de GB) laissent une trace consultable après leur disparition — pas seulement le bandeau GB déjà persistant à l'ouverture du match.
-3. `autoAnalysis()` n'affiche plus les insights à jugement qualitatif (PD, pertes de balle, efficacité, séries) en dessous d'un seuil minimal d'événements représentatif.
-4. Mode Simple : un seul jeu de boutons de résultat affiché à la fois, celui de l'équipe en possession (`S.possession`) ; le libellé et la couleur d'accent basculent automatiquement au changement de possession.
+- `queueEventForSync()` crée la ligne `matches` correspondante (via `upsertMatchSnapshot()`) avant de synchroniser le premier événement d'une session dont `S.currentMatchId` était `null` — symétrique à ce que fait déjà le bouton "▶ Lancer le match".
 
 **Hors scope :**
-- Toute refonte du Mode Expert (workflow terrain/zone), non concerné.
-- Le mécanisme de bascule manuelle de possession (bouton "◉ POSSESSION" du scoreboard) reste inchangé — c'est lui qui pilote quelle équipe est affichée en Mode Simple, pas une nouvelle UI à créer.
-- La correction du bug de sauvegarde ne touche pas la synchronisation Supabase (`upsertMatchSnapshot`/`markMatchFinished`), déjà correcte et testée — seul le comportement de l'IndexedDB local (`dbSaveMatch`) change.
-- Pas de nouveau système de notifications persistant complexe (centre de notifications) — un historique simple et local suffit pour répondre au besoin.
+- Tout le reste de la synchronisation (outbox, realtime, reprise multi-appareil STORY-13/14) — déjà correct, non touché.
+- Nettoyage rétroactif d'éventuelles lignes `match_events` déjà orphelines côté production (aucune connue à ce jour — celle créée pendant le test QA a déjà été supprimée manuellement).
+- Toute refonte du modèle de données ou de la stratégie offline-first.
 
 ## Critères de succès
-- Sauvegarder deux fois le même match en cours de session ne produit **jamais** deux entrées dans l'historique ni dans Bilan → Saison.
-- Une alerte "changez de GB" ratée au moment de son affichage reste consultable dans les secondes/minutes qui suivent, sans devoir la déclencher à nouveau.
-- Un match à moins de N événements (seuil à définir par le PM) n'affiche plus d'insights de jugement qualitatif non pertinents à ce volume.
-- En Mode Simple, l'écran de saisie n'affiche plus qu'une seule équipe à la fois ; changer de possession (auto après une action, ou manuellement) fait basculer instantanément le libellé et la couleur sans étape supplémentaire ; aucune régression sur le flash de confirmation (`S.simpleFlash`) ni sur l'enregistrement des événements.
+- Recharger un match archivé puis ajouter un événement crée bien la ligne `matches` correspondante côté Supabase avant que l'événement ne s'y synchronise — plus aucune erreur 409 en boucle sur ce chemin.
+- Aucune régression sur le flux normal (`▶ Lancer le match` déjà correct, ne doit pas appeler `upsertMatchSnapshot()` deux fois inutilement).
 
 ## Questions en suspens
-- Seuil exact du garde-fou d'événements pour l'Analyse (le PM tranchera un chiffre raisonnable, ex. 10 tirs cumulés).
-- Forme exacte de la "trace" des alertes ratées : un petit historique dépliable dans le bandeau existant, ou un nouvel élément dédié ? (le Designer tranchera, en respectant "je ne réinvente pas ce qui existe déjà").
-- Mode Simple à équipe unique : Romain a dit "une seule ligne de bouton" — à clarifier si c'est littéral (5 boutons sur une seule rangée CSS) ou "un seul jeu de boutons" (peut garder sa disposition actuelle en 2 rangées de 3+2, juste non dupliqué par équipe). Le Designer proposera une maquette et Romain validera au moment de la story.
+Aucune — root cause et correctif déjà clairs, pas d'ambiguïté à lever avant de coder.
