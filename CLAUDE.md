@@ -21,7 +21,7 @@ fenix/
 ├── style.css       ← tout le CSS (~895 lignes)
 ├── app.js          ← toute la logique JS (~5790 lignes)
 ├── config.js       ← identifiants Supabase (SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_AUTH_EMAIL), jamais la clé service_role
-├── sw.js           ← service worker (cache v109 : index + style + app + config + fenix-stat-badge.png, chemins relatifs "./" pour fonctionner en sous-dossier)
+├── sw.js           ← service worker (cache v113 : index + style + app + config + fenix-stat-badge.png, chemins relatifs "./" pour fonctionner en sous-dossier)
 ├── manifest.json   ← config PWA (start_url/scope en "./", relatifs)
 └── .nojekyll       ← nécessaire pour GitHub Pages (sert les fichiers tels quels, sans traitement Jekyll)
 ```
@@ -249,6 +249,14 @@ TM:       { needsMap:false, isTM:true }
 - **STORY-59** — Verrou de possession en Mode Simple : impossible d'enregistrer une action pour l'équipe qui n'a pas la balle (bouton grisé + message d'erreur, aucun enregistrement si cliqué quand même)
 - **STORY-60** — Rappel GB rendu fiable (vérifie que le gardien assigné est réellement sélectionné pour le match, pas juste qu'un `gkId` existe) + alertes TM conseillé/changez de GB étendues à Mode Simple (jamais branchées avant, même famille de gap que la possession auto-switch de STORY-52)
 - **STORY-61** — Boutons manuels de rechargement des effectifs par défaut (FENIX CF et Adversaire, onglet Équipes) — filet de sécurité pour un changement d'appareil sans dépendre d'un diagnostic à distance
+- **STORY-62** — Sauvegarde idempotente d'un match (`S.savedMatchId`) : sauvegarder deux fois la même session met à jour la même entrée locale (upsert par `id`) au lieu de créer un doublon dans l'historique/Bilan Saison ; `newMatch()` réinitialise `S.savedMatchId`, `loadMatchAsCurrent()` le fixe sur l'id du match archivé rechargé
+- **STORY-63** — Historique des 3 dernières alertes critiques (`S.alertHistory`), bandeau réductible en pastille `[🔔N]`, réinitialisé à chaque nouveau match ou match archivé rechargé
+- **STORY-64** — Garde-fou sur l'Analyse (`MIN_EVENTS_FOR_INSIGHTS`) : sous 10 tirs cumulés des deux équipes, les insights qualitatifs restent masqués (résultat + efficacité brute toujours affichés), sur Stats → Analyse et Bilan → Analyse
+- **STORY-65** — Mode Simple passe à un seul bloc de boutons (celui de l'équipe en possession) au lieu de dupliquer par équipe — rend le verrou de possession de STORY-59 sans objet (retiré, plus nécessaire structurellement)
+- **STORY-66** — Correctif d'un bug trouvé par le QA pendant le cycle STORY-62-65 (hors scope de ces 4 stories) : recharger un match archivé (`📂 Charger`) puis continuer la saisie provoquait des erreurs 409 en boucle sur `match_events` — `queueEventForSync()` appelle désormais `upsertMatchSnapshot()` pour créer la ligne `matches` manquante avant de synchroniser un nouvel événement
+- **STORY-67** — Grille dédiée pour 5 joueurs Demi-Centre (poste le plus peuplé du roster réel FENIX CF, `courtPlayerPositions()`), corrige leur chevauchement sur le terrain — même mécanisme `spread:"grid"` que la disposition Pivot de STORY-38
+- **STORY-68** — Raccourcis Mode Simple/Expert et Suivi GB dans l'en-tête (`.hdr-shortcuts`), toujours visibles (pas seulement en match actif), synchronisés avec les emplacements existants (Équipes, Réglages Match)
+- **STORY-69** — Correction de 3 bugs Majeurs trouvés lors d'un audit complet (`/verifie-complet`, 2026-08-20) : effectif courant écrasé en `localStorage` en rechargeant un match archivé (`loadMatchAsCurrent()`, via "📂 Charger" et le raccourci PDF Bilan) ; bouton "🎯 PD" attribuable à un événement non-but (carton, 2min, TM), corrompant la stat passe décisive ; condition de course dans `newMatch()` pouvant laisser un match fantôme "in_progress" indéfiniment sur Supabase — root cause du résidu "Yoshi" trouvé pendant l'audit, nettoyé au passage. Code Review **REJETÉ puis APPROUVÉ après reprise** (le premier correctif de la course bloquait le reset local sur le réseau, violant le principe fail-open) — QA PASSED, E2E CONFIRMÉ (réseau simulé lent testé deux fois indépendamment), Regression Guardian RAS
 
 ## Cloner ce projet pour un autre coach/équipe (STORY-17)
 
