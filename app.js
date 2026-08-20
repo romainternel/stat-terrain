@@ -45,7 +45,7 @@ const POS_XY={
   PVT: {x:50, y:59, spread:"grid", hSpread:26, vSpread:13}, // point de penalty (7m) — triangle à 3, carré à 4 (cf. courtPlayerPositions)
   ARG: {x:0,  y:76, anchor:"left"},             // 9m, bord aligné sur la ligne de touche gauche
   ARD: {x:100,y:76, anchor:"right"},            // 9m, miroir
-  DC:  {x:50, y:88},                            // centré, en retrait derrière l'alignement ARG/ARD
+  DC:  {x:50, y:88, spread:"grid", hSpread:30, vSpread:10}, // centré, en retrait derrière l'alignement ARG/ARD — pas resserres (STORY-67) : marge verticale reduite a cette position basse du terrain, roster reel FENIX CF jusqu'a 5 joueurs a ce poste (le plus peuple de l'effectif)
   "?": {x:50, y:85},
 };
 
@@ -1897,7 +1897,11 @@ function renderHeader(){
   const showAlertDot=inLiveMatch && S.alertHistoryCollapsed && !S.alertHistoryDismissed && S.alertHistory.length>0;
   return `<div class="hdr">
     <div class="logo" id="home-logo-btn" style="cursor:pointer;" title="Retour à l'accueil (changer d'équipe)"><div class="logo-i"><img src="${FENIX_LOGO}"></div><div><h1>CF FENIX STAT</h1><small>Toulouse Handball</small></div></div>
-    ${inLiveMatch?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>${showWarnDot?`<button id="lwb-reopen" class="launch-warning-dot" title="À vérifier avant de commencer">⚠️</button>`:""}${showAlertDot?`<button id="ahb-reopen" class="launch-warning-dot" title="Dernières alertes">🔔${S.alertHistory.length}</button>`:""}`:""}
+    <div class="hdr-shortcuts">
+      <button id="hdr-mode-btn" class="btn btn-xs hdr-shortcut" title="${S.mode==="simple"?"Mode Simple actif — tap pour passer en Expert":"Mode Expert actif — tap pour passer en Simple"}">${S.mode==="simple"?"⚡":"🎯"}</button>
+      <button id="hdr-trackgk-btn" class="btn btn-xs hdr-shortcut-gk ${S.trackGK?"on":""}" title="Suivi gardien">🧤<span class="hdr-shortcut-label">${S.trackGK?" ON":" OFF"}</span></button>
+    </div>
+    ${inLiveMatch?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;">⚙ Réglages</button>${showWarnDot?`<button id="lwb-reopen" class="launch-warning-dot" title="À vérifier avant de commencer">⚠️</button>`:""}${showAlertDot?`<button id="ahb-reopen" class="launch-warning-dot" title="Dernières alertes">🔔${S.alertHistory.length}</button>`:""}`:""}
     <div class="nav">${views.map(v=>`<button class="nav-b ${S.view===v.id?"on":""}" data-v="${v.id}">${v.l}</button>`).join("")}</div>
   </div>`;
 }
@@ -2802,15 +2806,19 @@ function courtPlayerPositions(roster){
       });
     } else if(base.spread==="grid"){
       // Disposition en grille autour de base.x/base.y — triangle à 3 (un joueur
-      // devant, centré, deux derrière), carré à 4 (deux de chaque côté). Sert
-      // PVT (STORY-38) mais réutilisable par tout poste qui recevrait un jour un
-      // effectif similaire. 5+ : pas de disposition dédiée, juste une grille
-      // générique à 2 colonnes qui garantit l'absence de chevauchement total.
+      // devant, centré, deux derrière), carré à 4 (deux de chaque côté), 3+2 à 5
+      // (STORY-67, DC — rangée haute de 3, rangée basse de 2, la plus compacte
+      // verticalement pour ce compte). Sert PVT (STORY-38) et DC (STORY-67) mais
+      // réutilisable par tout poste qui recevrait un jour un effectif similaire.
+      // 6+ : pas de disposition dédiée, juste une grille générique à 2 colonnes
+      // qui garantit l'absence de chevauchement total.
       const hStep=base.hSpread||26, vStep=base.vSpread||13;
       const layouts={
         2:[{dx:-hStep/2,dy:0},{dx:hStep/2,dy:0}],
         3:[{dx:0,dy:-vStep/2},{dx:-hStep/2,dy:vStep/2},{dx:hStep/2,dy:vStep/2}],
         4:[{dx:-hStep/2,dy:-vStep/2},{dx:hStep/2,dy:-vStep/2},{dx:-hStep/2,dy:vStep/2},{dx:hStep/2,dy:vStep/2}],
+        5:[{dx:-hStep,dy:-vStep/2},{dx:0,dy:-vStep/2},{dx:hStep,dy:-vStep/2},
+           {dx:-hStep/2,dy:vStep/2},{dx:hStep/2,dy:vStep/2}],
       };
       const layout=layouts[players.length];
       if(layout){
@@ -4673,6 +4681,11 @@ function bind(){
   // Retour rapide a l'accueil (logo header, meme action que le bouton des reglages)
   const homeLogoBtn=document.getElementById("home-logo-btn");
   if(homeLogoBtn) homeLogoBtn.onclick=()=>{ switchTeamProfile(); };
+  // Raccourcis en-tete : mode de saisie + suivi GB accessibles depuis n'importe quel ecran (STORY-68)
+  const hdrMode=document.getElementById("hdr-mode-btn");
+  if(hdrMode) hdrMode.onclick=()=>setMode(S.mode==="simple"?"expert":"simple");
+  const hdrGk=document.getElementById("hdr-trackgk-btn");
+  if(hdrGk) hdrGk.onclick=()=>{ S.trackGK=!S.trackGK; R(); };
   // Mode Simple: boutons de saisie rapide, une seule équipe affichée (celle en possession) — STORY-65
   document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
     const type=el.dataset.simple;
