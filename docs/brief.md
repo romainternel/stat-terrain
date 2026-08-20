@@ -1,32 +1,46 @@
-# Brief — Correctif synchronisation : match archivé rechargé puis modifié
+# Brief — Chevauchement DC sur le terrain + Raccourcis Mode/Suivi GB dans l'en-tête
 
 ## Contexte
-Trouvé par le QA pendant le cycle `/verifie` de STORY-62-65 (`docs/qa/QA-62-65-corrections-audit-et-mode-simple.md`), en dehors du périmètre de ces 4 stories — sujet distinct, cadré par le QA lui-même avec la root cause déjà identifiée par lecture de code. Demande explicite de Romain de le corriger maintenant.
+Deux retours de Romain en conditions réelles d'usage, à traiter dans le même cycle.
 
-## Problème
-Un coach recharge un match déjà archivé (bouton "📂 Charger", écran Matchs — par exemple pour corriger un événement oublié après coup) puis continue à saisir de nouveaux événements **sans relancer le match**. Chaque nouvel événement échoue silencieusement à se synchroniser vers Supabase : `queueEventForSync()` régénère un `S.currentMatchId` (puisque `loadMatchAsCurrent()` l'avait remis à `null`, comportement voulu par STORY-36 pour éviter d'écrire sur le mauvais match Supabase) mais **n'appelle jamais `upsertMatchSnapshot()`** pour créer la ligne `matches` correspondante — contrairement au bouton "▶ Lancer le match" qui le fait toujours. L'événement peut alors se retrouver écrit côté `match_events` sans ligne `matches` parente, et les tentatives de synchronisation suivantes échouent en boucle (erreur 409, retentée toutes les 15s par `flushOutbox()`).
+## Sujet 1 — Chevauchement des joueurs Demi-Centre (DC) sur le terrain, tablette
 
-Aujourd'hui, sans ce correctif : la saisie locale reste correcte (principe fail-open respecté, rien de visible ne casse pour le coach), mais les corrections apportées à un match rechargé ne se propagent jamais de façon fiable aux autres appareils — un autre appareil qui rouvrirait ce même match ne verrait pas les événements ajoutés après coup.
+### Problème
+Quand plusieurs joueurs au poste Demi-Centre (DC) sont sélectionnés pour un match, leurs étiquettes se chevauchent sur le terrain — repéré par Romain sur tablette. Le roster réel FENIX CF compte **5 joueurs enregistrés au poste DC** (Jules.G, Issa.S, Leni.A, Lucas.G, Antonin.V) — c'est le poste le plus peuplé de tout l'effectif, plus encore que Pivot (3 joueurs) qui avait pourtant déjà nécessité une disposition dédiée (STORY-38, triangle à 3 / carré à 4).
 
-## Utilisateurs
-Romain (ou un aidant occasionnel) sur iPad/iPhone, en train de corriger un match archivé après coup — un scénario plus rare que la saisie en direct pendant un match, mais réel (ex. un événement oublié pendant le match, repéré en revoyant le Bilan).
+### Root cause (déjà identifiée par lecture de code)
+`POS_XY.DC` (`app.js`) n'a aucune configuration `spread`, contrairement à `POS_XY.PVT` qui a `spread:"grid"`. DC tombe donc dans la branche par défaut de `courtPlayerPositions()` — un simple étalement vertical (`vSpread:13` par joueur) avec un plafond dur (`Math.min(96, ...)`). DC est déjà positionné bas sur le terrain (`y:88`, "en retrait derrière l'alignement ARG/ARD") — il ne reste que 8 unités de marge avant le plafond à 96. Avec 3 joueurs ou plus, l'étalement vertical dépasse cette marge et plusieurs joueurs se retrouvent collés au même point (`96`), d'où le chevauchement visuel.
+
+### Utilisateurs
+Romain sur iPad, en train de composer son effectif avant ou pendant un match — le terrain (Match Mode Expert, sélecteurs PD/2min/carton, Stats Joueurs/Gardiens/Comparaison) doit rester lisible quel que soit le nombre de joueurs sélectionnés à un poste donné.
+
+## Sujet 2 — Raccourcis Mode Simple/Expert et Suivi GB dans l'en-tête
+
+### Problème
+Changer de mode de saisie (Simple/Expert) ou activer/désactiver le suivi du gardien (`S.trackGK`) nécessite aujourd'hui de naviguer vers l'onglet Équipes (tout en bas de l'écran) ou d'ouvrir le panneau ⚙ Réglages (visible seulement pendant un match actif). Romain veut ces deux réglages accessibles en un tap, depuis n'importe quel écran, sans naviguer.
+
+### Utilisateurs
+Romain (ou un aidant occasionnel), en bord de terrain, qui a besoin de basculer rapidement de mode ou d'activer le suivi GB sans interrompre ce qu'il est en train de regarder (Stats, Bilan, etc.).
 
 ## Vision
-Qu'ajouter un événement à un match rechargé se synchronise aussi fiablement que la saisie d'un match qu'on vient de lancer — sans geste supplémentaire pour le coach, sans qu'il ait besoin de savoir que ce chemin existe.
+- DC (et tout poste futur qui recevrait un effectif aussi nombreux) s'affiche sans chevauchement sur le terrain, quel que soit le nombre de joueurs sélectionnés — en réutilisant l'infrastructure de disposition en grille déjà construite pour Pivot.
+- Basculer le mode de saisie ou le suivi GB devient un geste immédiat depuis l'en-tête de l'app, sur n'importe quel écran — sans naviguer vers Équipes ni ouvrir les Réglages.
 
 ## Scope
 
 **Dans le scope :**
-- `queueEventForSync()` crée la ligne `matches` correspondante (via `upsertMatchSnapshot()`) avant de synchroniser le premier événement d'une session dont `S.currentMatchId` était `null` — symétrique à ce que fait déjà le bouton "▶ Lancer le match".
+1. Donner à DC une disposition qui absorbe jusqu'à 5 joueurs sans chevauchement, cohérente avec l'infrastructure existante (`courtPlayerPositions()`, déjà utilisée par PVT).
+2. Ajouter, dans l'en-tête global (`renderHeader()`), juste à droite du logo "CF FENIX STAT" et avant les 5 onglets de navigation, un raccourci pour basculer `S.mode` (Simple/Expert) et un raccourci pour basculer `S.trackGK` (Suivi GB) — visibles et fonctionnels sur tous les écrans.
 
 **Hors scope :**
-- Tout le reste de la synchronisation (outbox, realtime, reprise multi-appareil STORY-13/14) — déjà correct, non touché.
-- Nettoyage rétroactif d'éventuelles lignes `match_events` déjà orphelines côté production (aucune connue à ce jour — celle créée pendant le test QA a déjà été supprimée manuellement).
-- Toute refonte du modèle de données ou de la stratégie offline-first.
+- Toute autre disposition de poste que DC (ALG/ARG/ARD/ALD restent en spread vertical simple, leurs effectifs réels ne dépassent jamais 3 joueurs).
+- Retirer les emplacements existants (Équipes, Réglages) de ces deux réglages — les raccourcis d'en-tête s'ajoutent, ils ne remplacent rien.
+- Toute refonte plus large de l'en-tête ou de la navigation.
 
 ## Critères de succès
-- Recharger un match archivé puis ajouter un événement crée bien la ligne `matches` correspondante côté Supabase avant que l'événement ne s'y synchronise — plus aucune erreur 409 en boucle sur ce chemin.
-- Aucune régression sur le flux normal (`▶ Lancer le match` déjà correct, ne doit pas appeler `upsertMatchSnapshot()` deux fois inutilement).
+- Sélectionner les 5 joueurs DC du roster FENIX CF affiche 5 étiquettes distinctes et lisibles sur le terrain, sans chevauchement, sur tablette comme sur téléphone.
+- Le mode de saisie et le suivi GB peuvent être changés en un tap depuis l'en-tête, sur n'importe quel écran (pas seulement Équipes/Réglages), sans dégrader la lisibilité des onglets de navigation sur iPhone étroit.
 
 ## Questions en suspens
-Aucune — root cause et correctif déjà clairs, pas d'ambiguïté à lever avant de coder.
+- Réglage exact de la grille DC (pas horizontal/vertical, éventuel ajustement du `y` de base) : à trancher par l'Architect en tenant compte de la marge verticale limitée à cette position du terrain.
+- Représentation exacte des raccourcis d'en-tête (icônes seules vs icône + état visuel) : à trancher par le Designer, avec la contrainte explicite de rester compact sur iPhone étroit (la nav défile déjà horizontalement, STORY-18).
