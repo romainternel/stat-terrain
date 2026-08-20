@@ -460,6 +460,10 @@ async function queueEventForSync(event){
   if(!S.currentMatchId){
     S.currentMatchId=gid();
     subscribeMatchEvents(S.currentMatchId);
+    await upsertMatchSnapshot(); // STORY-66 — cree la ligne 'matches' correspondante avant tout
+    // evenement, symetrique au bouton "Lancer le match" qui le fait deja ; sans ca, un match
+    // recharge (loadMatchAsCurrent() remet currentMatchId a null) puis modifie regenere un id ici
+    // sans jamais creer sa ligne matches, et l'evenement echoue en boucle a se synchroniser (409)
   }
   try{
     await outboxPut(eventToSupabaseRow(event,S.currentMatchId));
