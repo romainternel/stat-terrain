@@ -697,9 +697,6 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 .act-h.selected{
   background:rgba(255,255,255,.09);border-color:var(--accent);
   box-shadow:0 0 14px rgba(var(--accent-rgb),.22);}
-/* Mode Simple : equipe sans la possession, boutons grises mais toujours cliquables (le clic
-   declenche un message d'erreur plutot qu'un blocage silencieux, cf. bind() [data-simple]) */
-.act-h.simple-inactive{opacity:.4;}
 .act-h.simple-flash{animation:simple-flash-pop .4s ease-out;}
 @keyframes simple-flash-pop{
   0%{border-color:var(--accent);box-shadow:0 0 0 rgba(var(--accent-rgb),0);transform:scale(1);}

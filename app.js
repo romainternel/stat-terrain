@@ -3,6 +3,10 @@
 // ═══════════════════════════════════════════════════════
 const POSITIONS=["GB","ALG","ARG","DC","PVT","ARD","ALD","?"];
 const POS_L={GB:"Gardien",ALG:"Ailier G",ARG:"Arrière G",DC:"Demi-centre",PVT:"Pivot",ARD:"Arrière D",ALD:"Ailier D","?":"Inconnu"};
+// STORY-64 — seuil de tirs cumules (deux equipes) sous lequel les insights qualitatifs de
+// l'Analyse automatique (autoAnalysis() et son jumeau matchAnalysis()) restent masques : sur un
+// match ecourte/mi-temps interrompue, un jugement du type "jeu trop individuel" n'a pas de sens.
+const MIN_EVENTS_FOR_INSIGHTS=10;
 // Effectif FENIX CF (STORY-56) — liste fournie par Romain (joueurs.csv), prénom + initiale nom
 // (format volontairement choisi par le club, pas une troncature de ma part). Pas de numéro
 // fourni. Chargé automatiquement une seule fois (premier lancement sur un appareil sans effectif
@@ -110,6 +114,10 @@ function freshState(){
     halfTimeLastAlert:0, // timestamp du dernier rappel de mi-temps — volontairement separe de tmLastAlert pour ne pas se bloquer mutuellement
     launchWarningsCollapsed:false, // bandeau de validation au lancement (STORY-53) reduit en pastille
     launchWarningsDismissed:false, // bandeau ferme definitivement pour cette session de match
+    savedMatchId:null, // id de sauvegarde locale (dbSaveMatch) de la session en cours — reutilise par saveMatch() pour mettre a jour plutot que dupliquer (STORY-62)
+    alertHistory:[], // {time,msg} des dernieres alertes critiques (showToast isAlert), 3 max, plus recente en premier (STORY-63)
+    alertHistoryCollapsed:false, // bandeau alertes reduit en pastille
+    alertHistoryDismissed:false, // bandeau alertes ferme definitivement pour cette session de match
     simpleFlash:null, // {team,type} — flash de confirmation bref sur le bouton Mode Simple cliqué
     settingsOpen:false,
     coachNotes:"", // coach analysis notes for the match
@@ -1216,34 +1224,32 @@ function recordEvent(type, team, x, y, playerId){
 }
 
 function renderMatchSimple(){
-  // Un seul côté a la balle à la fois (S.possession) — l'autre reste visible mais grisé et
-  // bloqué au clic (cf. bind()), pour éviter les mistags "l'équipe sans le ballon marque".
-  const simpleBtn=(team,type,label,icon,accent)=>{
+  // STORY-65 — un seul jeu de boutons affiche a la fois, celui de l'equipe en possession
+  // (S.possession) ; le libelle/la couleur basculent au changement de possession plutot que
+  // d'afficher les deux equipes empilees. Reutilise .ml-actions/.act-h (meme conteneur que la
+  // barre Mode Expert, deja responsive) pour la rangee de boutons — pas de nouvelle disposition
+  // a maintenir. Le nom de l'equipe reste sur sa propre ligne au-dessus, exigence explicite de
+  // Romain (la surbrillance de couleur est un renfort, jamais un remplacement du texte).
+  const team=S.possession;
+  const accent=team==="home"?"var(--fenix-sky)":"var(--red)";
+  const name=S[team].name;
+  const simpleBtn=(type,label,icon)=>{
     const flashed=S.simpleFlash&&S.simpleFlash.team===team&&S.simpleFlash.type===type;
-    const inactive=team!==S.possession;
-    return `<button class="act-h ${flashed?"simple-flash":""} ${inactive?"simple-inactive":""}" data-simple="${team}|${type}" style="flex:1;">
+    return `<button class="act-h ${flashed?"simple-flash":""}" data-simple="${type}">
       <span class="ah-icon" style="color:${accent}">${icon}</span>
       <span class="ah-label" style="color:${accent}">${label}</span>
     </button>`;
   };
-  const teamRow=(team,accent,name)=>`
-    <div>
-      <div style="font-size:11px;font-weight:700;color:${accent};text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${name}</div>
-      <div style="display:flex;gap:5px;">
-        ${simpleBtn(team,"GOAL","BUT","⚽",accent)}
-        ${simpleBtn(team,"SAVE","ARRÊT","🧤",accent)}
-        ${simpleBtn(team,"OFF","NON CADRÉ","↗",accent)}
-      </div>
-      <div style="display:flex;gap:5px;margin-top:5px;">
-        ${simpleBtn(team,"TURNOVER","PB","↩",accent)}
-        ${simpleBtn(team,"FREEKICK","JET FRANC","🔄",accent)}
-      </div>
-    </div>`;
   return `
     <div style="background:rgba(240,199,94,.12);border:1.5px solid var(--yellow);border-radius:6px;padding:5px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--yellow);letter-spacing:.06em;margin-bottom:10px;">⚡ MODE SIMPLE ACTIF</div>
-    ${teamRow("home","var(--fenix-sky)",S.home.name)}
-    <div style="height:10px;"></div>
-    ${teamRow("away","var(--red)",S.away.name)}
+    <div style="font-size:11px;font-weight:700;color:${accent};text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">● ${name}</div>
+    <div class="ml-actions">
+      ${simpleBtn("GOAL","BUT","⚽")}
+      ${simpleBtn("SAVE","ARRÊT","🧤")}
+      ${simpleBtn("OFF","NON CADRÉ","↗")}
+      ${simpleBtn("TURNOVER","PB","↩")}
+      ${simpleBtn("FREEKICK","JET FRANC","🔄")}
+    </div>
   `;
 }
 
@@ -1357,6 +1363,14 @@ function safeConfirm(msg){
   try{ return window.confirm(msg); }catch(e){ return true; }
 }
 function showToast(msg, isAlert){
+  if(isAlert){
+    // STORY-63 — les alertes critiques (TM conseille, changez de GB, ...) disparaissent trop vite
+    // pour un coach qui a les yeux sur le terrain ; on garde une trace des 3 dernieres, consultable
+    // depuis le bandeau alertes de l'ecran Match. Point unique : couvre tous les showToast(...,true)
+    // existants et futurs sans devoir toucher chaque site d'appel individuellement.
+    S.alertHistory.unshift({time:fmtTime(S.time), msg});
+    if(S.alertHistory.length>3) S.alertHistory.length=3;
+  }
   const t=document.createElement("div");
   const bg=isAlert?"rgba(232,70,90,.95)":"#1A2840";
   const border=isAlert?"2px solid #FF3344":"1px solid #7BA7C2";
@@ -1605,7 +1619,7 @@ async function importAllMatches(){
 async function saveMatch(){
   if(S.readOnly) return;
   const match={
-    id:Date.now(),
+    id:S.savedMatchId||Date.now(), // STORY-62 — reutilise l'id de la sauvegarde deja faite pour cette session (dbSaveMatch fait un put() upsert par id, keyPath:"id") plutot que d'en creer un nouveau a chaque clic
     date:new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}),
     season:S.season, journee:S.journee, championnat:S.championnat||"",
     teamProfile:S.teamProfile||"cf", // STORY-50 — scope l'historique par equipe
@@ -1618,6 +1632,7 @@ async function saveMatch(){
   };
   try{
     await dbSaveMatch(match);
+    S.savedMatchId=match.id; // memorise pour que le prochain saveMatch() de cette session mette a jour plutot que dupliquer
     const count=await dbGetAll().then(a=>a.filter(m=>(m.teamProfile||"cf")===(S.teamProfile||"cf")).length).catch(()=>0);
     // Auto-reparation (trouve suite a un incident reel, cf. docs/brief-v15-diagnostic-sync-multi-appareil.md) :
     // markMatchFinishedById() ne fait que des update() -- si la ligne Supabase n'a jamais existe
@@ -1693,6 +1708,8 @@ function newMatch(){
   S.actionPanel=null; S.penMode=false;
   S.tmUsed={mt1:0,mt2:0}; S.tmLastAlert=0; S.halfTimeLastAlert=0; S.coachNotes="";
   S.launchWarningsCollapsed=false; S.launchWarningsDismissed=false; S.simpleFlash=null;
+  S.savedMatchId=null; // STORY-62 — nouveau match = nouvelle sauvegarde locale, jamais une mise a jour de l'ancienne
+  S.alertHistory=[]; S.alertHistoryCollapsed=false; S.alertHistoryDismissed=false; // STORY-63
   S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
   S.journee="J"+(jNum+1);
   S.championnat=""; // reinitialise a chaque match (STORY-50), jamais persiste comme S.season — evite qu'un "Amical" oublie contamine le match suivant
@@ -1728,6 +1745,8 @@ function loadMatchAsCurrent(id, opts={}){
   S.time=m.time||0; S.period=m.period||1;
   S.season=m.season||S.season; S.journee=m.journee||S.journee;
   S.coachNotes=m.coachNotes||"";
+  S.savedMatchId=m.id; // STORY-62 — re-sauvegarder ce match repris met a jour cette meme entree, n'en cree pas une nouvelle
+  S.alertHistory=[]; S.alertHistoryCollapsed=false; S.alertHistoryDismissed=false; // STORY-63 — jamais herite du match precedent
   S.selectedAction=null; S.shotOverlay=null; S.playerSelect=null;
   S.penResultSelect=null; S.pdSelect=false; S.actionPanel=null; S.penMode=false;
   S.gkFilter={home:"all",away:"all"}; S.gkShotFilter={goals:true,saves:true,offs:true};
@@ -1871,9 +1890,10 @@ function renderHeader(){
   const views=[{id:"setup",l:"🤾 Équipes"},{id:"match",l:"⚡ Match"},{id:"stats",l:"📊 Stats"},{id:"bilan",l:"📈 Bilan"},{id:"history",l:"📁 Matchs"}];
   const inLiveMatch=S.view==="match" && (!!S.currentMatchId || S.events.length>0);
   const showWarnDot=inLiveMatch && S.launchWarningsCollapsed && !S.launchWarningsDismissed && launchWarnings().length>0;
+  const showAlertDot=inLiveMatch && S.alertHistoryCollapsed && !S.alertHistoryDismissed && S.alertHistory.length>0;
   return `<div class="hdr">
     <div class="logo" id="home-logo-btn" style="cursor:pointer;" title="Retour à l'accueil (changer d'équipe)"><div class="logo-i"><img src="${FENIX_LOGO}"></div><div><h1>CF FENIX STAT</h1><small>Toulouse Handball</small></div></div>
-    ${inLiveMatch?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>${showWarnDot?`<button id="lwb-reopen" class="launch-warning-dot" title="À vérifier avant de commencer">⚠️</button>`:""}`:""}
+    ${inLiveMatch?`<button id="settings-btn" class="btn btn-sm" style="border-color:var(--border);color:var(--t2);white-space:nowrap;margin-left:auto;">⚙ Réglages</button>${showWarnDot?`<button id="lwb-reopen" class="launch-warning-dot" title="À vérifier avant de commencer">⚠️</button>`:""}${showAlertDot?`<button id="ahb-reopen" class="launch-warning-dot" title="Dernières alertes">🔔${S.alertHistory.length}</button>`:""}`:""}
     <div class="nav">${views.map(v=>`<button class="nav-b ${S.view===v.id?"on":""}" data-v="${v.id}">${v.l}</button>`).join("")}</div>
   </div>`;
 }
@@ -2264,10 +2284,25 @@ function renderMatch(){
     <ul>${lw.map(w=>`<li>${w}</li>`).join("")}</ul>
   </div>`:"";
 
+  // STORY-63 — meme pattern que le bandeau de validation ci-dessus (reduction/fermeture
+  // independantes), reutilise les memes classes CSS (bandeau jaune deja etabli pour ce type
+  // d'info non-bloquante) plutot que d'en creer un nouveau.
+  const alertHistoryBannerHtml=(!S.alertHistoryCollapsed && !S.alertHistoryDismissed && S.alertHistory.length>0)?`<div class="launch-warning-banner">
+    <div class="lwb-head">
+      <span>🔔 Dernières alertes</span>
+      <span class="lwb-actions">
+        <button class="lwb-btn" id="ahb-collapse" title="Réduire">–</button>
+        <button class="lwb-btn" id="ahb-dismiss" title="Fermer">✕</button>
+      </span>
+    </div>
+    <ul>${S.alertHistory.map(a=>`<li>${a.time} · ${a.msg}</li>`).join("")}</ul>
+  </div>`:"";
+
   return `
   <div class="match-layout poss-${S.possession} ${S.readOnly?"is-readonly":""}">
     ${readOnlyBannerHtml}
     ${launchWarningBannerHtml}
+    ${alertHistoryBannerHtml}
     <!-- COLONNE GAUCHE: équipes + timer -->
     <div class="ml-left">
       <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:var(--r2);border:1px solid var(--border);">
@@ -3215,40 +3250,53 @@ function autoAnalysis(){
   const hEff=hTotal>0?Math.round(hScore/hTotal*100):0;
   const aEff=aTotal>0?Math.round(aScore/aTotal*100):0;
   const hPB=teamStat("home","TURNOVER"), aPB=teamStat("away","TURNOVER");
-  
+  // STORY-64 — sous ce seuil (tirs cumules des deux equipes), les insights qualitatifs
+  // (jugements relatifs : "trop", "insuffisant", series, tranches horaires) n'ont pas de sens
+  // statistique sur un match ecourte/mi-temps interrompue — seuls le resultat et l'efficacite
+  // brute (factuels, jamais un jugement) restent toujours affiches.
+  const enoughData=(hTotal+aTotal)>=MIN_EVENTS_FOR_INSIGHTS;
+
   // Result
   if(hScore>aScore) insights.push({icon:"✅",text:`Victoire ${hScore}-${aScore} (+${hScore-aScore})`});
   else if(hScore<aScore) insights.push({icon:"❌",text:`Défaite ${hScore}-${aScore} (-${aScore-hScore})`});
   else insights.push({icon:"🤝",text:`Match nul ${hScore}-${aScore}`});
-  
+
   // Efficiency comparison
   insights.push({icon:"📊",text:`Efficacité FENIX ${hEff}% vs Adversaire ${aEff}%`});
-  if(hEff<50) insights.push({icon:"⚠️",text:`Efficacité faible (${hEff}%) - travail du tir nécessaire`});
-  
+  if(enoughData && hEff<50) insights.push({icon:"⚠️",text:`Efficacité faible (${hEff}%) - travail du tir nécessaire`});
+
   // PB analysis
-  if(hPB>8) insights.push({icon:"🔴",text:`${hPB} pertes de balle - trop élevé`});
-  else if(hPB<=5) insights.push({icon:"🟢",text:`${hPB} pertes de balle - bonne gestion`});
-  
+  if(enoughData){
+    if(hPB>8) insights.push({icon:"🔴",text:`${hPB} pertes de balle - trop élevé`});
+    else if(hPB<=5) insights.push({icon:"🟢",text:`${hPB} pertes de balle - bonne gestion`});
+  }
+
   // Max consecutive goals conceded
   let maxRun=0, curRun=0;
   [...S.events].reverse().forEach(e=>{
     if(e.team==="away" && ACTIONS[e.type]?.isGoal){ curRun++; maxRun=Math.max(maxRun,curRun); }
     else if(e.team==="away" && ACTIONS[e.type]?.isSave){ curRun=0; }
   });
-  if(maxRun>=4) insights.push({icon:"🚨",text:`Série max de ${maxRun} buts encaissés d'affilée`});
-  else if(maxRun<=2) insights.push({icon:"🟢",text:`Défense solide - max ${maxRun} buts consécutifs`});
-  
+  if(enoughData){
+    if(maxRun>=4) insights.push({icon:"🚨",text:`Série max de ${maxRun} buts encaissés d'affilée`});
+    else if(maxRun<=2) insights.push({icon:"🟢",text:`Défense solide - max ${maxRun} buts consécutifs`});
+  }
+
   // Half-time analysis
   const hMT1=periodScore("home",1), hMT2=periodScore("home",2);
   const aMT1=periodScore("away",1), aMT2=periodScore("away",2);
-  if(hMT2>hMT1+2) insights.push({icon:"📈",text:`Forte 2ème MT (+${hMT2-hMT1} buts vs MT1)`});
-  if(hMT2<hMT1-2) insights.push({icon:"📉",text:`Baisse en 2ème MT (${hMT2} vs ${hMT1} en MT1)`});
-  
+  if(enoughData){
+    if(hMT2>hMT1+2) insights.push({icon:"📈",text:`Forte 2ème MT (+${hMT2-hMT1} buts vs MT1)`});
+    if(hMT2<hMT1-2) insights.push({icon:"📉",text:`Baisse en 2ème MT (${hMT2} vs ${hMT1} en MT1)`});
+  }
+
   // PD analysis
   const hPD=S.events.filter(e=>e.team==="home"&&e.assistId).length;
-  if(hPD>=10) insights.push({icon:"🟢",text:`${hPD} passes décisives - bon collectif`});
-  else if(hPD<=5) insights.push({icon:"⚠️",text:`Seulement ${hPD} PD - jeu trop individuel ?`});
-  
+  if(enoughData){
+    if(hPD>=10) insights.push({icon:"🟢",text:`${hPD} passes décisives - bon collectif`});
+    else if(hPD<=5) insights.push({icon:"⚠️",text:`Seulement ${hPD} PD - jeu trop individuel ?`});
+  }
+
   // Efficiency by 10-min blocks
   const blocks=[{l:"0-10'",p:1,min:0,max:10},{l:"10-20'",p:1,min:10,max:20},{l:"20-30'",p:1,min:20,max:30},
     {l:"30-40'",p:2,min:0,max:10},{l:"40-50'",p:2,min:10,max:20},{l:"50-60'",p:2,min:20,max:30}];
@@ -3266,8 +3314,10 @@ function autoAnalysis(){
       if(!bestBlock||eff>bestBlock.eff) bestBlock={l:b.l,eff,goals,total};
     }
   });
-  if(bestBlock) insights.push({icon:"⏱",text:`Meilleure période : ${bestBlock.l} (${bestBlock.eff}%, ${bestBlock.goals}/${bestBlock.total})`});
-  if(worstBlock&&worstBlock.eff<50) insights.push({icon:"⏱",text:`Période difficile : ${worstBlock.l} (${worstBlock.eff}%, ${worstBlock.goals}/${worstBlock.total})`});
+  if(enoughData){
+    if(bestBlock) insights.push({icon:"⏱",text:`Meilleure période : ${bestBlock.l} (${bestBlock.eff}%, ${bestBlock.goals}/${bestBlock.total})`});
+    if(worstBlock&&worstBlock.eff<50) insights.push({icon:"⏱",text:`Période difficile : ${worstBlock.l} (${worstBlock.eff}%, ${worstBlock.goals}/${worstBlock.total})`});
+  }
   
   // Top scorer
   const playerStats={};
@@ -3889,6 +3939,7 @@ function matchAnalysis(m){
   const hTotal=ms.home.total, aTotal=ms.away.total;
   const hEff=ms.home.eff, aEff=ms.away.eff;
   const hPB=ms.home.turnovers;
+  const enoughData=(hTotal+aTotal)>=MIN_EVENTS_FOR_INSIGHTS; // STORY-64 — meme seuil qu'autoAnalysis(), cf. commentaire a la definition de la constante
 
   // Result
   if(hScore>aScore) insights.push({icon:"✅",text:`Victoire ${hScore}-${aScore} (+${hScore-aScore})`});
@@ -3897,11 +3948,13 @@ function matchAnalysis(m){
 
   // Efficiency comparison
   insights.push({icon:"📊",text:`Efficacité FENIX ${hEff}% vs Adversaire ${aEff}%`});
-  if(hEff<50) insights.push({icon:"⚠️",text:`Efficacité faible (${hEff}%) - travail du tir nécessaire`});
+  if(enoughData && hEff<50) insights.push({icon:"⚠️",text:`Efficacité faible (${hEff}%) - travail du tir nécessaire`});
 
   // PB analysis
-  if(hPB>8) insights.push({icon:"🔴",text:`${hPB} pertes de balle - trop élevé`});
-  else if(hPB<=5) insights.push({icon:"🟢",text:`${hPB} pertes de balle - bonne gestion`});
+  if(enoughData){
+    if(hPB>8) insights.push({icon:"🔴",text:`${hPB} pertes de balle - trop élevé`});
+    else if(hPB<=5) insights.push({icon:"🟢",text:`${hPB} pertes de balle - bonne gestion`});
+  }
 
   // Max consecutive goals conceded
   let maxRun=0, curRun=0;
@@ -3909,18 +3962,24 @@ function matchAnalysis(m){
     if(e.team==="away" && ACTIONS[e.type]?.isGoal){ curRun++; maxRun=Math.max(maxRun,curRun); }
     else if(e.team==="away" && ACTIONS[e.type]?.isSave){ curRun=0; }
   });
-  if(maxRun>=4) insights.push({icon:"🚨",text:`Série max de ${maxRun} buts encaissés d'affilée`});
-  else if(maxRun<=2) insights.push({icon:"🟢",text:`Défense solide - max ${maxRun} buts consécutifs`});
+  if(enoughData){
+    if(maxRun>=4) insights.push({icon:"🚨",text:`Série max de ${maxRun} buts encaissés d'affilée`});
+    else if(maxRun<=2) insights.push({icon:"🟢",text:`Défense solide - max ${maxRun} buts consécutifs`});
+  }
 
   // Half-time analysis
   const hMT1=periodScoreOfMatch(m,"home",1), hMT2=periodScoreOfMatch(m,"home",2);
-  if(hMT2>hMT1+2) insights.push({icon:"📈",text:`Forte 2ème MT (+${hMT2-hMT1} buts vs MT1)`});
-  if(hMT2<hMT1-2) insights.push({icon:"📉",text:`Baisse en 2ème MT (${hMT2} vs ${hMT1} en MT1)`});
+  if(enoughData){
+    if(hMT2>hMT1+2) insights.push({icon:"📈",text:`Forte 2ème MT (+${hMT2-hMT1} buts vs MT1)`});
+    if(hMT2<hMT1-2) insights.push({icon:"📉",text:`Baisse en 2ème MT (${hMT2} vs ${hMT1} en MT1)`});
+  }
 
   // PD analysis
   const hPD=evts.filter(e=>e.team==="home"&&e.assistId).length;
-  if(hPD>=10) insights.push({icon:"🟢",text:`${hPD} passes décisives - bon collectif`});
-  else if(hPD<=5) insights.push({icon:"⚠️",text:`Seulement ${hPD} PD - jeu trop individuel ?`});
+  if(enoughData){
+    if(hPD>=10) insights.push({icon:"🟢",text:`${hPD} passes décisives - bon collectif`});
+    else if(hPD<=5) insights.push({icon:"⚠️",text:`Seulement ${hPD} PD - jeu trop individuel ?`});
+  }
 
   // Efficiency by 10-min blocks
   const blocks=[{l:"0-10'",p:1,min:0,max:10},{l:"10-20'",p:1,min:10,max:20},{l:"20-30'",p:1,min:20,max:30},
@@ -3939,8 +3998,10 @@ function matchAnalysis(m){
       if(!bestBlock||eff>bestBlock.eff) bestBlock={l:b.l,eff,goals,total};
     }
   });
-  if(bestBlock) insights.push({icon:"⏱",text:`Meilleure période : ${bestBlock.l} (${bestBlock.eff}%, ${bestBlock.goals}/${bestBlock.total})`});
-  if(worstBlock&&worstBlock.eff<50) insights.push({icon:"⏱",text:`Période difficile : ${worstBlock.l} (${worstBlock.eff}%, ${worstBlock.goals}/${worstBlock.total})`});
+  if(enoughData){
+    if(bestBlock) insights.push({icon:"⏱",text:`Meilleure période : ${bestBlock.l} (${bestBlock.eff}%, ${bestBlock.goals}/${bestBlock.total})`});
+    if(worstBlock&&worstBlock.eff<50) insights.push({icon:"⏱",text:`Période difficile : ${worstBlock.l} (${worstBlock.eff}%, ${worstBlock.goals}/${worstBlock.total})`});
+  }
 
   // Top scorer
   const playerStats={};
@@ -4608,16 +4669,10 @@ function bind(){
   // Retour rapide a l'accueil (logo header, meme action que le bouton des reglages)
   const homeLogoBtn=document.getElementById("home-logo-btn");
   if(homeLogoBtn) homeLogoBtn.onclick=()=>{ switchTeamProfile(); };
-  // Mode Simple: boutons de saisie rapide par équipe (auto-validation)
+  // Mode Simple: boutons de saisie rapide, une seule équipe affichée (celle en possession) — STORY-65
   document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
-    const [team,type]=el.dataset.simple.split("|");
-    // Seule l'equipe en possession peut enregistrer une action (retour de Romain : on pouvait
-    // jusqu'ici tagger n'importe quelle equipe meme sans le ballon) — bloque et alerte plutot
-    // que d'enregistrer, ne jamais se contenter d'un simple visuel grise.
-    if(team!==S.possession){
-      showToast("⚠️ "+S[team].name+" n'a pas la possession", true);
-      return;
-    }
+    const type=el.dataset.simple;
+    const team=S.possession; // un seul bloc de boutons existe desormais (celui de l'equipe en possession) : plus besoin de verifier/bloquer, ce cas est structurellement impossible (STORY-59 devient sans objet en Mode Simple)
     // Flash bref de confirmation (STORY-53/M2) — Mode Simple enregistre l'evenement instantanement,
     // sans etat "selectionne" persistant comme en Mode Expert (.act-h.selected) : ce flash est le
     // seul retour visuel confirmant que le clic a bien ete pris en compte.
@@ -4948,6 +5003,10 @@ function bind(){
   const lwCollapse=document.getElementById("lwb-collapse"); if(lwCollapse) lwCollapse.onclick=()=>{S.launchWarningsCollapsed=true;R();};
   const lwDismiss=document.getElementById("lwb-dismiss"); if(lwDismiss) lwDismiss.onclick=()=>{S.launchWarningsDismissed=true;R();};
   const lwReopen=document.getElementById("lwb-reopen"); if(lwReopen) lwReopen.onclick=()=>{S.launchWarningsCollapsed=false;R();};
+  // STORY-63 — memes handlers que le bandeau ci-dessus, etat independant
+  const ahCollapse=document.getElementById("ahb-collapse"); if(ahCollapse) ahCollapse.onclick=()=>{S.alertHistoryCollapsed=true;R();};
+  const ahDismiss=document.getElementById("ahb-dismiss"); if(ahDismiss) ahDismiss.onclick=()=>{S.alertHistoryDismissed=true;R();};
+  const ahReopen=document.getElementById("ahb-reopen"); if(ahReopen) ahReopen.onclick=()=>{S.alertHistoryCollapsed=false;R();};
   const ub=document.getElementById("undo-btn"); if(ub) ub.onclick=undoLast;
   const tf=document.getElementById("toggle-feed"); if(tf) tf.onclick=()=>{S.feedOpen=!S.feedOpen;R();};
   const cf=document.getElementById("close-feed"); if(cf) cf.onclick=()=>{S.feedOpen=false;R();};
