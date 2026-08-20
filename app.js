@@ -809,7 +809,7 @@ function checkHalfTimeReminder(){
   showToast("⏰ Fin de la 1ère mi-temps réglementaire — pense à basculer sur MT2", true);
 }
 function startTimer(){ if(S.running||S.readOnly)return; S.running=true; timerInterval=setInterval(()=>{S.time++;checkHalfTimeReminder();renderTimer();},1000); upsertMatchSnapshot(); R();}
-function stopTimer(){ if(S.readOnly)return; S.running=false; clearInterval(timerInterval); upsertMatchSnapshot(); R();}
+function stopTimer(){ if(S.readOnly)return; S.running=false; clearInterval(timerInterval); const p=upsertMatchSnapshot(); R(); return p; }
 function resetTimer(){ if(S.readOnly)return; stopTimer(); S.time=0; R();}
 function fmtTime(t){ const m=Math.floor(t/60),s=t%60; return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"); }
 function renderTimer(){ const el=document.getElementById("tmr"); if(el) el.textContent=fmtTime(S.time); }
@@ -1662,16 +1662,20 @@ async function saveMatch(){
 }
 
 // Marque un match Supabase comme terminé, pour qu'il arrête d'apparaître comme "reprenable"
-async function markMatchFinishedById(matchId){
+// meta optionnel : {season,journee,coachNotes,championnat} à écrire à la place des valeurs S.*
+// courantes — nécessaire quand l'appel est différé après coup (cf. newMatch()) et que S.* a déjà
+// été réinitialisé pour le match SUIVANT au moment où cette écriture réseau part réellement.
+async function markMatchFinishedById(matchId, meta){
   const client=initSupabaseClient();
   if(!client||!matchId) return;
+  const m=meta||{season:S.season, journee:S.journee, coachNotes:S.coachNotes, championnat:S.championnat};
   try{ await client.from('matches').update({status:'finished'}).eq('id',matchId); }catch(e){}
   // Appel separe, volontairement (STORY-48/49/50) : si season/journee/coach_notes/championnat
   // n'existent pas encore cote Supabase (migration pas encore executee), PostgREST rejette tout
   // l'appel pour colonne inconnue — separe du statut 'finished' ci-dessus, un oubli de migration
   // ne degrade que l'enrichissement, jamais le comportement deja en production (le match qui
   // arrete de s'afficher comme "reprenable" sur les autres appareils).
-  try{ await client.from('matches').update({season:S.season, journee:S.journee, coach_notes:S.coachNotes||"", championnat:S.championnat||""}).eq('id',matchId); }catch(e){}
+  try{ await client.from('matches').update({season:m.season, journee:m.journee, coach_notes:m.coachNotes||"", championnat:m.championnat||""}).eq('id',matchId); }catch(e){}
 }
 async function markMatchFinished(){ return markMatchFinishedById(S.currentMatchId); }
 
@@ -1700,11 +1704,18 @@ async function deleteSupabaseMatch(matchId){
 function newMatch(){
   if(S.readOnly) return;
   if(!safeConfirm("Nouveau match ? Les stats en cours seront perdues si non sauvegardées.")) return;
-  stopTimer();
-  // Appelé AVANT tout reset ci-dessous : markMatchFinished() pousse season/journee/coach_notes/
-  // championnat encore actuels (STORY-48/49/50) vers l'ancien match Supabase — l'appeler après
-  // les resets lui ferait hériter à tort de la journée/du championnat du PROCHAIN match.
-  markMatchFinished(); // l'ancien match ne doit plus apparaître comme "reprenable" une fois abandonné
+  // Capturés AVANT tout reset ci-dessous : la finalisation part en arrière-plan (chaînée, jamais
+  // attendue — le reset local ne doit jamais dépendre du réseau, principe non négociable CLAUDE.md)
+  // mais doit écrire les valeurs de CE match qui se termine, pas celles du PROCHAIN déjà
+  // réinitialisées au moment où elle s'exécutera réellement.
+  const finishingId=S.currentMatchId;
+  const finishingMeta={season:S.season, journee:S.journee, coachNotes:S.coachNotes, championnat:S.championnat};
+  const snapshotDone=stopTimer(); // stoppe le chrono localement tout de suite (sync), renvoie la promesse de l'upsert réseau (status:'in_progress')
+  // Chaîné plutôt qu'attendu : garantit que la finalisation (status:'finished') arrive toujours APRÈS
+  // cet upsert côté serveur pour CE match précis — corrige la course qui pouvait laisser un match
+  // fantôme bloqué "in_progress" pour toujours (bug trouvé en audit le 2026-08-20, root cause du
+  // match fantôme "Yoshi") — sans jamais bloquer le reset local qui suit.
+  Promise.resolve(snapshotDone).then(()=>markMatchFinishedById(finishingId, finishingMeta)); // l'ancien match ne doit plus apparaître comme "reprenable" une fois abandonné
   // Increment journée
   const jNum=parseInt(S.journee.replace(/\D/g,""))||0;
   S.events=[]; S.time=0; S.period=1; S.selectedAction=null; S.shotOverlay=null;
@@ -1760,7 +1771,12 @@ function loadMatchAsCurrent(id, opts={}){
   });
   S.view = opts.gotoView || "match";
   if(opts.gotoStatsTab) S.statsTab = opts.gotoStatsTab;
-  saveTeams(); R();
+  // Pas de saveTeams() ici : S.home/S.away ne reflètent que l'effectif TEL QU'IL ÉTAIT pendant ce
+  // match archivé (ligne ci-dessus) — le persister écraserait silencieusement l'effectif courant
+  // de l'équipe active en localStorage (bug trouvé en audit le 2026-08-20 : effectif CF réduit de
+  // 22 à 13 joueurs après un simple "📂 Charger"). L'effectif réel reste intact en localStorage,
+  // seul l'état en mémoire de cette session reflète temporairement le match rechargé.
+  R();
   return true;
 }
 
@@ -2244,7 +2260,7 @@ function renderMatch(){
   };
 
   let pdBtnHtml="";
-  if(S.mode==="expert"&&S.events.length>0&&!S.actionPanel){
+  if(S.mode==="expert"&&S.events.length>0&&!S.actionPanel&&ACTIONS[S.events[0].type]?.isGoal){
     const ev=S.events[0]; const hasPd=!!ev.assistName;
     pdBtnHtml=`<button id="pd-btn" class="ml-ctrl-btn" style="border-color:${hasPd?"var(--yellow)":"var(--border)"};color:${hasPd?"var(--yellow)":"var(--t2)"};">${hasPd?"✓ PD":"🎯 PD"}</button>`;
   }
@@ -2480,7 +2496,7 @@ function renderGkSelect(){
   const awayGbs = S.away.players.filter(p=>p.position==="GB" && p.selected);
   // PD button
   let pdHtml = "";
-  if(S.events.length>0){
+  if(S.events.length>0 && ACTIONS[S.events[0].type]?.isGoal){
     const ev=S.events[0]; const a=ACTIONS[ev.type];
     const hasPd=!!ev.assistName;
     const pdLabel=hasPd?`✓ #${ev.assistNumber||""} ${ev.assistName}`:"🎯 PD";
