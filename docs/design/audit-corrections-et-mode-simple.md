@@ -39,8 +39,12 @@ Comportement identique au bandeau GB existant sur tous les viewports déjà couv
 
 ## F4 — Mode Simple : un seul jeu de boutons
 
-### Choix retenu
-Romain a dit "une seule ligne de bouton" — interprété comme **un seul jeu de boutons affiché à la fois**, pas une compression littérale des 5 boutons sur une seule rangée CSS (qui les rendrait trop petits pour un usage au doigt sur iPhone, à l'encontre du besoin exprimé). La disposition interne (3 boutons puis 2 en dessous) est conservée telle quelle — c'est la **duplication par équipe** qui disparaît, pas la disposition des boutons eux-mêmes. À confirmer avec Romain au moment de la revue de la story si ce n'est pas ce qu'il avait en tête.
+### Choix retenu (mis à jour après retour de Romain)
+Clarification de Romain : pas forcément tout sur une seule rangée dans l'absolu ("sur tél c'est mieux mais sur tablette et iPad je sais pas") — et il tient explicitement à garder **le nom de l'équipe affiché au-dessus des boutons**, pas seulement la surbrillance/couleur de possession comme seul repère.
+
+Plutôt que d'inventer une nouvelle logique de rupture responsive (1 rangée sur téléphone / 2 rangées sur tablette, avec un seuil arbitraire à maintenir), la disposition retenue **réutilise telle quelle la barre d'actions du Mode Expert** (`.ml-actions`/`.act-h`, `app.js` fonction `renderMatchPanel()`/zone `.ml-actions`) : ces boutons sont **déjà** sur une seule rangée flex, **déjà** responsive (rétrécissement de padding/icônes en paysage iPhone ≤932px, `style.css:787-804`), et **déjà** validés en conditions réelles sur iPhone et iPad pour 6 boutons (BUT/ARRÊT/NON CADRÉ/PB/PO/JET FRANC). Le Mode Simple n'a besoin que de 5 boutons (pas de PO) — donc structurellement moins serré que la barre Expert déjà éprouvée. Répond aux deux retours à la fois : compact sur téléphone (une seule rangée, comme demandé), confortable sur tablette/iPad (la même rangée, juste avec plus d'air), sans code responsive supplémentaire à écrire ni à tester séparément.
+
+Le nom de l'équipe reste affiché en toutes lettres au-dessus de cette rangée, dans tous les cas — la surbrillance de couleur est un **renfort**, jamais un remplacement du texte.
 
 ### Maquette — avant/après
 
@@ -59,27 +63,28 @@ Romain a dit "une seule ligne de bouton" — interprété comme **un seul jeu de
 └─────────────────────────────────┘
 ```
 
-**Après (1 seul bloc, libellé dynamique) :**
+**Après (1 seul bloc, une seule rangée de 5 boutons, libellé dynamique) :**
 ```
-┌─────────────────────────────────┐
-│  ⚡ MODE SIMPLE ACTIF            │
-├─────────────────────────────────┤
-│  ● FENIX TOULOUSE  (en possession)
-│  [BUT] [ARRÊT] [NON CADRÉ]      │
-│  [PB]  [JET FRANC]              │
-└─────────────────────────────────┘
+┌───────────────────────────────────────────┐
+│  ⚡ MODE SIMPLE ACTIF                      │
+├───────────────────────────────────────────┤
+│  ● FENIX TOULOUSE            (en possession)
+│  [BUT] [ARRÊT] [NON CADRÉ] [PB] [JET FRANC]│
+└───────────────────────────────────────────┘
 ```
 Après un but (possession bascule vers l'Adversaire) :
 ```
-┌─────────────────────────────────┐
-│  ⚡ MODE SIMPLE ACTIF            │
-├─────────────────────────────────┤
-│  ● AUDIT TEST  (en possession)  │
-│  [but] [arrêt] [non cadré]      │
-│  [pb]  [jet franc]              │
-└─────────────────────────────────┘
+┌───────────────────────────────────────────┐
+│  ⚡ MODE SIMPLE ACTIF                      │
+├───────────────────────────────────────────┤
+│  ● AUDIT TEST                (en possession)
+│  [but] [arrêt] [non cadré] [pb] [jet franc]│
+└───────────────────────────────────────────┘
 ```
-- Le point `●` devant le nom d'équipe reprend le code couleur déjà utilisé pour la pastille "◉ POSSESSION" du scoreboard (cohérence visuelle, pas un nouveau symbole à apprendre).
+Sur téléphone (viewport étroit), la même rangée se comprime automatiquement via les points de rupture déjà existants de `.act-h` (icônes/padding réduits) — pas une disposition différente, la même barre qui rétrécit, exactement comme la barre Mode Expert le fait déjà aujourd'hui.
+
+- Le **nom de l'équipe reste écrit en toutes lettres** au-dessus des boutons dans tous les cas — exigence explicite de Romain, pas seulement la couleur/surbrillance.
+- Le point `●` devant le nom d'équipe reprend le code couleur déjà utilisé pour la pastille "◉ POSSESSION" du scoreboard (renfort visuel en plus du texte, pas à la place).
 - Couleur d'accent des boutons = couleur de l'équipe active (bleu FENIX / rouge Adversaire), exactement comme aujourd'hui pour le bloc actif — la seule différence est que le bloc inactif ne s'affiche plus du tout, il ne devient pas "cliquable pour l'autre équipe" par erreur.
 - Le flash de confirmation (`.simple-flash`) et le badge "⚡ MODE SIMPLE ACTIF" restent identiques.
 
@@ -93,7 +98,9 @@ Après un but (possession bascule vers l'Adversaire) :
 - **Mode lecteur actif** : le bloc reste affiché en lecture seule, comme aujourd'hui pour l'écran Match complet — pas de changement de ce comportement.
 
 ### Responsive
-Le gain d'espace vertical (un seul bloc au lieu de deux) profite directement au cas visé par Romain : iPhone portrait, où l'écran Match Mode Simple nécessitait un peu de scroll avec deux équipes empilées. À re-vérifier visuellement sur 390×844 une fois implémenté (même viewport que les vérifications historiques STORY-24).
+Double gain, sur deux axes différents :
+- **Vertical** (un seul bloc au lieu de deux empilés) : profite à tous les viewports, mais surtout à iPhone portrait où l'écran Match Mode Simple nécessitait un peu de scroll avec deux équipes empilées.
+- **Horizontal** (rangée unique de 5 boutons au lieu de 3+2) : en réutilisant `.act-h`/`.ml-actions`, hérite gratuitement des points de rupture déjà validés pour la barre Mode Expert (rétrécissement icônes/padding en paysage iPhone ≤932px, `style.css:787-804`) — pas de nouveau test responsive à concevoir, seulement à re-vérifier que 5 boutons Mode Simple se comportent aussi bien que les 6 boutons Mode Expert déjà éprouvés, sur les mêmes viewports historiques (390×844 portrait, paysage iPhone, iPad).
 
 ## Composants réutilisés vs nouveaux
 - **Réutilisés** : `launchWarnings()`/pattern bandeau réductible (F2), `S.possession`/`S.simpleFlash`/couleurs d'équipe existantes (F4), liste d'insights `ANALYSE AUTOMATIQUE` existante (F3).

@@ -105,7 +105,7 @@ Aucune — une constante locale suffit.
 ## F4 — Mode Simple à équipe unique
 
 ### Décision technique
-`renderMatchSimple()` (`app.js:1218-1248`) appelle actuellement `teamRow()` deux fois (une fois par équipe, empilées). Remplacer par un seul appel, sur l'équipe en possession :
+`renderMatchSimple()` (`app.js:1218-1248`) appelle actuellement `teamRow()` deux fois (une fois par équipe, empilées, chacune en 2 rangées de 3+2 boutons via des `<div style="display:flex">` ad hoc). Remplacer par un seul bloc, sur l'équipe en possession, **en réutilisant le conteneur `.ml-actions` déjà utilisé par la barre d'actions Mode Expert** (mêmes classes CSS, mêmes points de rupture responsive déjà en place — retour de Romain : il veut une seule rangée sur téléphone, et ça passe très bien sur tablette/iPad aussi, exactement le comportement déjà obtenu par `.ml-actions`/`.act-h` pour les 6 boutons Mode Expert) :
 ```javascript
 function renderMatchSimple(){
   const team = S.possession; // "home" ou "away"
@@ -113,27 +113,26 @@ function renderMatchSimple(){
   const name = S[team].name;
   const simpleBtn=(type,label,icon)=>{
     const flashed=S.simpleFlash&&S.simpleFlash.team===team&&S.simpleFlash.type===type;
-    return `<button class="act-h ${flashed?"simple-flash":""}" data-simple="${type}" style="flex:1;">
+    return `<button class="act-h ${flashed?"simple-flash":""}" data-simple="${type}">
       <span class="ah-icon" style="color:${accent}">${icon}</span>
       <span class="ah-label" style="color:${accent}">${label}</span>
     </button>`;
   };
   return `
     <div style="background:rgba(240,199,94,.12);border:1.5px solid var(--yellow);border-radius:6px;padding:5px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--yellow);letter-spacing:.06em;margin-bottom:10px;">⚡ MODE SIMPLE ACTIF</div>
-    <div>
-      <div style="font-size:11px;font-weight:700;color:${accent};text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">● ${name}</div>
-      <div style="display:flex;gap:5px;">
-        ${simpleBtn("GOAL","BUT","⚽")}
-        ${simpleBtn("SAVE","ARRÊT","🧤")}
-        ${simpleBtn("OFF","NON CADRÉ","↗")}
-      </div>
-      <div style="display:flex;gap:5px;margin-top:5px;">
-        ${simpleBtn("TURNOVER","PB","↩")}
-        ${simpleBtn("FREEKICK","JET FRANC","🔄")}
-      </div>
+    <div style="font-size:11px;font-weight:700;color:${accent};text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">● ${name}</div>
+    <div class="ml-actions">
+      ${simpleBtn("GOAL","BUT","⚽")}
+      ${simpleBtn("SAVE","ARRÊT","🧤")}
+      ${simpleBtn("OFF","NON CADRÉ","↗")}
+      ${simpleBtn("TURNOVER","PB","↩")}
+      ${simpleBtn("FREEKICK","JET FRANC","🔄")}
     </div>`;
 }
 ```
+Le nom d'équipe (`● ${name}`) reste sur sa **propre ligne au-dessus**, en toutes lettres — non négociable (retour explicite de Romain : "en plus de la surbrillance de la possession je veux quand même le nom au-dessus des boutons", précisé "nom d'équipe" — la couleur d'accent ne remplace jamais le texte).
+
+**Note responsive** : `.ml-actions{display:flex;gap:5px;...}`/`.act-h{flex:1.4;...}` (`style.css:687-695`) gèrent déjà le rétrécissement proportionnel sur téléphone (`style.css:787-804`, testé et validé pour 6 boutons Mode Expert) — 5 boutons Mode Simple sont structurellement moins serrés, aucune nouvelle règle CSS/breakpoint à écrire.
 `data-simple` n'encode plus que le `type` (le `team` est implicite : toujours `S.possession` au moment du clic, lu directement dans le handler). Binding à mettre à jour en conséquence (`app.js:4612-4627`) :
 ```javascript
 document.querySelectorAll("[data-simple]").forEach(el=>{ el.onclick=()=>{
@@ -149,6 +148,7 @@ Le garde `if(team!==S.possession){showToast(...); return;}` (`app.js:4617-4619`,
 ### Pourquoi (alternatives rejetées)
 - **Garder les deux blocs mais masquer celui inactif en CSS (`display:none`)** : rejeté — ne résout pas le vrai problème (Romain veut regagner l'espace vertical, pas juste cacher visuellement ce qui prend déjà de la place dans le flux du DOM ; `display:none` le retire bien du flux en réalité, mais cette approche garde deux blocs de markup dupliqués à maintenir en synchronisation avec `S.possession`, plus fragile que ne générer qu'un seul bloc directement dans `renderMatchSimple()`).
 - **Garder `team` dans `data-simple`** ("toujours `S.possession|type`") : rejeté — inutile puisqu'un seul bloc existe désormais, `S.possession` est déjà lisible directement dans le handler ; simplifier l'attribut réduit la surface de code à maintenir.
+- **Écrire un nouveau point de rupture dédié Mode Simple** (1 rangée sous X px, 2 rangées au-dessus) pour répondre à "sur tél c'est mieux, sur tablette je sais pas" : rejeté — `.ml-actions`/`.act-h` répond déjà exactement à ce besoin (une seule rangée partout, qui se comprime proportionnellement sur téléphone) sans qu'un nouveau seuil arbitraire soit nécessaire ni testé séparément ; réutiliser un composant déjà validé plutôt que d'en raisonner un nouveau.
 
 ### Impact sur l'existant
 - **STORY-59 (verrou de possession) devient sans objet en Mode Simple** : le scénario qu'elle corrigeait ("cliquer l'équipe qui n'a pas la balle") ne peut plus se produire une fois qu'un seul bloc de boutons existe. La classe CSS `.simple-inactive{opacity:.4;}` (`style.css:702`) devient inutilisée — à supprimer par le Developer en même temps (pas de raison de la garder), ou à laisser si le Developer préfère minimiser le diff ; sans impact fonctionnel dans les deux cas.
