@@ -80,9 +80,25 @@ Mode hors-ligne PWA (aucun outil d'émulation offline dans le serveur Playwright
 
 **Impact** : ce bug touche la donnée "PD" dans **7+ sites d'agrégation distincts** (Stats→Comparaison, Stats→Joueurs, export PDF, Bilan→Analyse export texte, tous vérifiés dans le code) — tous filtrent uniquement sur `e.assistId` sans jamais vérifier `isGoal`. La corruption serait donc invisible en croisant Stats/PDF entre eux (tous auraient le même chiffre faux), et pourrait fausser durablement le comptage des passes décisives d'un joueur si un coach clique ce bouton par réflexe juste après une exclusion/un carton (positionné au même endroit que juste après un vrai but).
 
-### ⚠️ Donnée résiduelle trouvée sur Supabase (pas un bug de code)
+### ❌ [MAJEUR] `newMatch()` — condition de course qui peut laisser un match "fantôme" éternellement "en cours" sur Supabase
 
-Un match "en cours" **FENIX Toulouse vs Yoshi** (0 événement, créé 2026-08-20 17:41) traîne sur le projet Supabase de production — proposé au login comme match reprenable. "Yoshi" n'est manifestement pas un vrai adversaire (déjà visible dans l'historique local comme 3e match sauvegardé, 0-0, 0 événement). Probablement un reliquat d'une session de test antérieure non nettoyée. Non supprimé par prudence (pas de certitude sur son origine) — à faire par Romain via le bouton 🗑 sur l'écran Matchs, ou à confirmer si le nettoyage automatique de fin de session a un trou.
+**Découvert en creusant l'origine du match résiduel "Yoshi"** (initialement classé "donnée résiduelle, origine incertaine" — root cause identifiée après coup, cf. addendum ci-dessous).
+
+**Où** : `newMatch()`, `app.js` (~ligne 1700-1723).
+
+**Mécanisme** : `newMatch()` appelle `stopTimer()` **avant** `markMatchFinished()` — et **avant** de remettre `S.currentMatchId` à `null`. Or `stopTimer()` (ligne 812) appelle systématiquement `upsertMatchSnapshot()` (même si le chrono n'était pas en train de tourner — `stopTimer()` n'a pas de garde `if(!S.running) return`, contrairement à `startTimer()`), et `upsertMatchSnapshot()` (ligne 441-456) **écrit toujours `status:'in_progress'` en dur**, sans exception. Ces deux appels (`stopTimer()`→upsert "in_progress" et `markMatchFinished()`→update "finished") sont tous les deux asynchrones et **jamais attendus (`await`)** dans `newMatch()` : ils partent en parallèle vers Supabase sur la **même ligne**. Si la requête d'upsert répond après celle de finalisation, la ligne reste **coincée en "in_progress" pour toujours** — plus aucun code ne la retouchera jamais, puisque `S.currentMatchId` a déjà été remis à `null` côté app.
+
+**Confirmé en conditions réelles, deux fois dans cette seule session** :
+- Mon propre match de test (`69245e9a-...`), pourtant explicitement supprimé de Supabase avant de cliquer "🆕 Nouveau match", **a été recréé par cet upsert** juste après suppression (nouveau `created_at` observé, identique à l'horodatage du clic sur "Nouveau match").
+- Le match "Yoshi" (`12672d81-...`, créé 2026-08-20 15:42 — **avant le début de cette session d'audit**, donc généré par un usage/test antérieur, probablement via ce même bug) était dans le même état : "in_progress", 0 événement, jamais rattrapable.
+
+**Impact réel** : chaque clic sur "🆕 Nouveau match" pendant que le chrono tourne (le cas normal en fin de match) déclenche cette course. Statistiquement, ça passe la plupart du temps (d'où l'absence de plainte jusqu'ici), mais quand ça rate, un match fantôme reste visible **indéfiniment** sur l'écran "Match en cours" au prochain login sur n'importe quel appareil — confusion potentielle pour Romain ("un match tourne encore ? lequel ?"), et pollution progressive de l'historique Supabase.
+
+**Correctif attendu** : dans `newMatch()`, attendre (`await`) `markMatchFinished()` avant tout appel concurrent à `upsertMatchSnapshot()` (ou inverser l'ordre : finaliser d'abord, arrêter le chrono ensuite sans upsert redondant), et/ou faire en sorte que `stopTimer()` n'écrive jamais `status:'in_progress'` si le match vient d'être marqué "finished" dans le même cycle.
+
+### Nettoyage effectué suite à cette découverte
+
+Les deux matchs fantômes trouvés (`69245e9a-...` "Adversaire" et `12672d81-...` "Yoshi", tous deux 0 événement réel, confirmé par requête directe) ont été supprimés de Supabase (`matches` + `match_events`) et de l'historique local du navigateur de test — **0 ligne "in_progress" restante**, vérifié par requête directe après coup. Aucun des deux vrais matchs de Romain (Rodez ×2) n'a été affecté.
 
 ### Divers mineurs (non bloquants)
 
@@ -100,7 +116,8 @@ Un match "en cours" **FENIX Toulouse vs Yoshi** (0 événement, créé 2026-08-2
 **RÉGRESSIONS DÉTECTÉES** :
 1. [Majeur] "📂 Charger" un match archivé écrase l'effectif courant en local (`loadMatchAsCurrent()` + `saveTeams()`)
 2. [Majeur] Le bouton "🎯 PD" permet d'attribuer une passe décisive à un événement non-but, corrompant la stat PD partout où elle est calculée
+3. [Majeur] `newMatch()` — condition de course pouvant laisser un match fantôme "in_progress" indéfiniment sur Supabase (root cause du match résiduel "Yoshi" trouvé en début d'audit, et reproduit une 2e fois pendant le nettoyage de fin de session)
 
-Aucune des deux n'est bloquante pour un usage immédiat (le premier bug ne se déclenche qu'en rechargeant un ancien match ; le second nécessite un clic malencontreux sur un bouton secondaire) — mais toutes deux méritent une story de correction avant la prochaine fois qu'un ancien match sera rechargé en vrai match, ou avant une saison complète d'usage du bouton PD.
+Aucune des trois n'est bloquante pour un usage immédiat (la 1 et la 2 nécessitent une action spécifique du coach ; la 3 se manifeste silencieusement, sans jamais bloquer la saisie), mais toutes trois méritent correction avant la prochaine fois qu'un ancien match sera rechargé, qu'un carton/2min sera suivi d'un clic PD par réflexe, ou qu'un nouveau match sera lancé après un précédent.
 
 Le reste du périmètre Critique + Important testé (~55 features) est conforme, y compris sous stress réel (workflow complet d'un match simulé, alertes automatiques déclenchées en vrai, 4 viewports différents, isolation -18/CF vérifiée en écriture réelle).
