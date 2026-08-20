@@ -1,61 +1,46 @@
-# Brief — FENIX Stats : audit & évolution
+# Brief — Corrections Audit Final (2026-08-20) + Mode Simple à équipe unique
 
-*Produit par l'Analyst — squad build BMAD*
+## Contexte
+Deux sources convergent vers ce cycle :
+1. L'Audit Final du 2026-08-20 (`docs/audit-final/AUDIT-2026-08-20.md`) a trouvé 1 bug Gênant (pas de Bloquant) et proposé 2 suggestions, toutes acceptées par Romain pour correction.
+2. Romain a lui-même identifié, en marge de l'audit, un vrai problème d'usage sur l'écran Match en Mode Simple sur téléphone : les boutons de résultat sont dupliqués (une rangée par équipe, FENIX puis Adversaire empilées), ce qui prend deux fois l'espace vertical nécessaire sur un écran déjà contraint.
 
-## 1. Contexte
+Pourquoi maintenant : le Mode Simple existe depuis STORY-23/24 et a été pensé "iPhone-first" (détection auto sous 700px), mais son layout actuel n'a jamais remis en cause le principe "une rangée par équipe" hérité du Mode Expert (qui, lui, affiche forcément les deux équipes côte à côte car le workflow est différent). Romain l'utilise en conditions réelles depuis plusieurs matchs et remonte maintenant ce retour terrain.
 
-FENIX Stats existe déjà et est en production (Netlify, `fenix-statscf.netlify.app`). L'historique git montre qu'un chantier visuel important vient d'être mené (police Inter, thème par possession, refonte du layout match en 3 colonnes, glow/bordures dynamiques). L'app n'est donc pas un point de départ vierge : c'est un audit + une passe d'amélioration ciblée sur une base déjà solide.
+## Problème
+**Aujourd'hui, sans ces corrections :**
+- Un coach qui sauvegarde un match par réflexe en cours de partie puis re-sauvegarde en fin de match crée deux entrées distinctes dans l'historique — sans le savoir, sans message d'avertissement. Bilan → Saison compte alors un match en trop (victoire/défaite en double).
+- Les alertes critiques en plein match (buts consécutifs, TM conseillé) s'affichent 2,5 à 4 secondes puis disparaissent sans laisser de trace. Un coach qui a les yeux sur le terrain au mauvais moment les rate intégralement — contrairement au bandeau de rappel GB (STORY-53) qui lui reste affiché.
+- L'analyse automatique de fin de match tient un discours de jugement ("jeu trop individuel") même sur un échantillon d'événements minuscule (match écourté, mi-temps interrompue), ce qui n'a pas de sens statistique et peut être perçu comme un jugement hâtif par le coach qui le lit ou le montre aux joueurs.
+- En Mode Simple sur téléphone, la moitié de l'écran de saisie est occupée par les boutons de l'équipe qui n'a **pas** la balle — grisés, non cliquables, mais toujours présents et prenant de la place. Le coach doit descendre/remonter dans l'écran plus que nécessaire pour saisir vite, alors que la saisie rapide est justement la raison d'être du Mode Simple.
 
-Romain (responsable du Centre de Formation FENIX Toulouse) déclenche ce cycle pour :
-- faire un état des lieux objectif de ce qui existe,
-- identifier ce qui manque ou frotte encore à l'usage,
-- cadrer une suite de travail qui rende l'app **utilisable aussi bien sur iPhone que sur iPad**, tout en restant simple et en montant encore le niveau visuel ("graphiquement cool").
+## Utilisateurs
+Romain (et tout aidant occasionnel amené à saisir), en bord de terrain, un œil sur le match et un doigt sur l'écran — le contexte d'usage exact documenté dans `CLAUDE.md` pour le Mode Simple : iPhone en priorité, saisie one-handed, sous contrainte de temps réelle (le jeu continue pendant la saisie).
 
-Contrainte explicite de Romain : ce projet doit rester **indépendant** des autres outils CF (notamment l'appli web de suivi CF présente sur sa machine) — pas de dépendance de code ni de données partagées entre les deux.
+## Vision
+Fiabiliser deux points de fond découverts par l'audit sans changer le comportement visible ailleurs, et réduire de moitié l'espace vertical occupé par la zone de saisie du Mode Simple en n'affichant que les boutons de l'équipe qui a effectivement la balle — la bascule d'équipe devient un simple changement de libellé/couleur, pas un nouveau geste à apprendre.
 
-## 2. Problème
+## Scope
 
-Aujourd'hui, l'app est documentée et pensée quasi exclusivement pour l'iPad ("Optimisé iPad" dans le CLAUDE.md du projet). Or Romain veut pouvoir prendre des stats **aussi depuis un iPhone**, en bord de terrain, dans les mêmes conditions de pression qu'un match (une main, jet d'œil rapide, pas de temps pour chercher un bouton). Le layout match actuel (grille 3 colonnes avec une colonne fixe de 240px) est pensé pour un écran large — sa dégradation sur un écran iPhone (portrait, plus étroit) n'a pas été validée explicitement.
-
-Par ailleurs, le rendu visuel a déjà été retravaillé récemment, mais sans passage dédié d'un œil "polish premium" (ombres, micro-animations, cohérence des effets) — il y a probablement une marge entre "ça a l'air propre" et "ça a l'air premium".
-
-Enfin, les données de match vivent uniquement en local (IndexedDB) sur l'appareil utilisé pendant le match — un point de vigilance si Romain change d'appareil (iPad ↔ iPhone) ou en cas de perte/casse.
-
-## 3. Utilisateurs
-
-- **Utilisateur principal (et unique aujourd'hui)** : Romain, responsable du Centre de Formation, en bord de terrain pendant les matchs de Nationale 1.
-- **Contexte d'usage** : debout ou assis en bord de terrain, sous pression du direct, doit suivre le jeu en même temps qu'il saisit les actions. Zéro tolérance pour un workflow qui demande de réfléchir ou de chercher.
-- **Appareil** : iPad aujourd'hui en priorité, iPhone à couvrir en usage équivalent (pas juste "ça s'affiche", mais "ça se saisit aussi vite").
-- **Fréquence** : usage récurrent, un match à la fois (pas de multi-match simultané).
-
-## 4. Vision
-
-Une app FENIX Stats qui reste redoutablement simple à utiliser en plein match — sur iPad comme sur iPhone, à une main si besoin — et dont le rendu visuel donne immédiatement une impression premium quand on l'ouvre devant d'autres coachs.
-
-## 5. Scope
-
-**Dans le scope de ce cycle :**
-- Audit du responsive existant et adaptation réelle du layout match pour iPhone (pas seulement un reflow, une vraie hiérarchie d'info adaptée au petit écran).
-- Passe de polish visuel (Visual Crafter) sur les écrans clés, en continuité avec le chantier déjà engagé (Inter, thème possession), pas une re-refonte.
-- Vérification et renforcement de la sécurité des données locales (export/sauvegarde) compte tenu d'un usage potentiel multi-appareils.
-- Identification et correction des points de friction UX restants dans le workflow de saisie d'action.
+**Dans le scope :**
+1. `saveMatch()` met à jour la sauvegarde locale existante de la session en cours plutôt que d'en créer une nouvelle à chaque clic.
+2. Les alertes critiques (TM conseillé, changez de GB) laissent une trace consultable après leur disparition — pas seulement le bandeau GB déjà persistant à l'ouverture du match.
+3. `autoAnalysis()` n'affiche plus les insights à jugement qualitatif (PD, pertes de balle, efficacité, séries) en dessous d'un seuil minimal d'événements représentatif.
+4. Mode Simple : un seul jeu de boutons de résultat affiché à la fois, celui de l'équipe en possession (`S.possession`) ; le libellé et la couleur d'accent basculent automatiquement au changement de possession.
 
 **Hors scope :**
-- Compte utilisateur, synchronisation cloud multi-appareils, backend serveur.
-- Changement de stack (reste vanilla JS / IndexedDB / PWA — pas de framework).
-- Toute dépendance ou partage de code avec l'autre appli web CF (suivi CF).
-- Multi-utilisateur simultané sur un même match.
+- Toute refonte du Mode Expert (workflow terrain/zone), non concerné.
+- Le mécanisme de bascule manuelle de possession (bouton "◉ POSSESSION" du scoreboard) reste inchangé — c'est lui qui pilote quelle équipe est affichée en Mode Simple, pas une nouvelle UI à créer.
+- La correction du bug de sauvegarde ne touche pas la synchronisation Supabase (`upsertMatchSnapshot`/`markMatchFinished`), déjà correcte et testée — seul le comportement de l'IndexedDB local (`dbSaveMatch`) change.
+- Pas de nouveau système de notifications persistant complexe (centre de notifications) — un historique simple et local suffit pour répondre au besoin.
 
-## 6. Critères de succès
+## Critères de succès
+- Sauvegarder deux fois le même match en cours de session ne produit **jamais** deux entrées dans l'historique ni dans Bilan → Saison.
+- Une alerte "changez de GB" ratée au moment de son affichage reste consultable dans les secondes/minutes qui suivent, sans devoir la déclencher à nouveau.
+- Un match à moins de N événements (seuil à définir par le PM) n'affiche plus d'insights de jugement qualitatif non pertinents à ce volume.
+- En Mode Simple, l'écran de saisie n'affiche plus qu'une seule équipe à la fois ; changer de possession (auto après une action, ou manuellement) fait basculer instantanément le libellé et la couleur sans étape supplémentaire ; aucune régression sur le flash de confirmation (`S.simpleFlash`) ni sur l'enregistrement des événements.
 
-- Une action de jeu se saisit en autant de taps sur iPhone que sur iPad, sans zone de clic trop petite ni élément coupé/caché.
-- Le rendu est jugé visuellement "premium" (cohérence des ombres, transitions, hiérarchie) et pas seulement "propre".
-- Aucune régression sur les fonctionnalités actuelles (alertes auto, stats GB, export PDF, gestion d'équipes).
-- Le dossier `fenix/` reste autonome : aucun import ni dépendance vers un autre projet CF.
-
-## 7. Questions en suspens
-
-- Romain est-il le seul utilisateur en saisie, ou un membre du staff peut-il aussi saisir (pertinent pour savoir si on doit prévoir un mode "aide/formation" ou si la simplicité prime toujours sur la pédagogie) ?
-- L'iPad reste-t-il l'appareil de référence en match officiel, l'iPhone servant plutôt de solution de secours/mobilité (ex : match à l'extérieur, tournoi) ? Ça change la priorité entre "iPhone parfait" et "iPhone correct en dépannage".
-- Un export/sauvegarde régulier (CSV/JSON déjà existant) est-il déjà utilisé comme filet de sécurité, ou faut-il le rendre plus visible/automatique ?
-- Remarque annexe (non bloquante) : un ancien dossier `.bmad/` avec des agents spécifiques au projet (coach, design, fenix, scout, stats, terrain) apparaît supprimé dans l'état git local mais toujours suivi par git — à confirmer que c'est un nettoyage volontaire avant de committer.
+## Questions en suspens
+- Seuil exact du garde-fou d'événements pour l'Analyse (le PM tranchera un chiffre raisonnable, ex. 10 tirs cumulés).
+- Forme exacte de la "trace" des alertes ratées : un petit historique dépliable dans le bandeau existant, ou un nouvel élément dédié ? (le Designer tranchera, en respectant "je ne réinvente pas ce qui existe déjà").
+- Mode Simple à équipe unique : Romain a dit "une seule ligne de bouton" — à clarifier si c'est littéral (5 boutons sur une seule rangée CSS) ou "un seul jeu de boutons" (peut garder sa disposition actuelle en 2 rangées de 3+2, juste non dupliqué par équipe). Le Designer proposera une maquette et Romain validera au moment de la story.
