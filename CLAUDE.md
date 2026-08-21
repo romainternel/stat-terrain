@@ -18,8 +18,8 @@ Responsable : Romain, responsable du centre de formation (CF).
 ```
 fenix/
 ├── index.html      ← shell HTML (~20 lignes)
-├── style.css       ← tout le CSS (~895 lignes)
-├── app.js          ← toute la logique JS (~5790 lignes)
+├── style.css       ← tout le CSS (~901 lignes)
+├── app.js          ← toute la logique JS (~5886 lignes)
 ├── config.js       ← identifiants Supabase (SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_AUTH_EMAIL), jamais la clé service_role
 ├── sw.js           ← service worker (cache v114 : index + style + app + config + fenix-stat-badge.png, chemins relatifs "./" pour fonctionner en sous-dossier)
 ├── manifest.json   ← config PWA (start_url/scope en "./", relatifs)
