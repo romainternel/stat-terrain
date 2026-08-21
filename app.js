@@ -242,6 +242,7 @@ function switchTeamProfile(){
   if(S.events.length>0 && !safeConfirm("Changer d'équipe ? Le match en cours sur cet appareil sera abandonné (sauvegarde-le d'abord avec 💾 si besoin).")) return;
   markMatchFinished(); // l'ancien match ne doit plus apparaître comme "reprenable"
   S.currentMatchId=null;
+  matchRegisteredThisSession=false; // durcissement défensif (2026-08-21) : ce flag ne doit jamais survivre à un changement de match — voir les 2 mêmes lignes dans newMatch()/loadMatchAsCurrent()
   unsubscribeMatchEvents();
   S.teamProfile=null;
   try{ localStorage.removeItem("hb2_team_profile"); }catch(e){}
@@ -1730,6 +1731,7 @@ function newMatch(){
   S.championnat=""; // reinitialise a chaque match (STORY-50), jamais persiste comme S.season — evite qu'un "Amical" oublie contamine le match suivant
   S.away=defaultAdversaireTeam(); // nouvel adversaire a chaque match — repart du modele 7 postes, jamais l'ancien effectif renomme du match precedent
   S.currentMatchId=null; // nouveau match = nouvel id Supabase, régénéré à la volée au premier événement
+  matchRegisteredThisSession=false; // durcissement défensif (2026-08-21) : ce flag ne doit jamais survivre à un changement de match. La vraie protection contre un id régénéré non enregistré est déjà dans queueEventForSync() (STORY-66, cf. son commentaire) ; ce reset est redondant avec elle en pratique (vérifié), gardé par cohérence si un futur appel direct à upsertMatchSnapshot() se glissait avant le premier événement.
   unsubscribeMatchEvents();
   R();
 }
@@ -1752,6 +1754,7 @@ function loadMatchAsCurrent(id, opts={}){
   // symétrique à newMatch() : sinon la souscription Realtime encore active écrirait les
   // événements/snapshots du match archivé vers le matchId Supabase du vrai match en cours.
   S.currentMatchId = null;
+  matchRegisteredThisSession=false; // durcissement défensif (2026-08-21), même raison que dans newMatch() — voir son commentaire
   unsubscribeMatchEvents();
 
   S.home={...m.home,players:(m.home?.players||[]).map(p=>({...p}))};

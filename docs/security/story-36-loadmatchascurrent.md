@@ -84,3 +84,9 @@ Aucun Critique. Le correctif P0 protège réellement contre le scénario décrit
 
 ## Comment je travaille avec les autres agents
 Le finding Majeur (#3) n'est pas un blocage pour le feu vert de STORY-36 (préexistant, symétrique à `newMatch()` déjà en production, hors diff de cette story), mais je le signale explicitement pour qu'il devienne un ticket de dette technique suivi séparément — sans quoi il resterait un angle mort silencieux sur la fiabilité de la synchronisation Supabase pour n'importe quel 2e match démarré dans la même session navigateur.
+
+## Addendum (2026-08-21) — finding #3 refermé, sans lien direct
+
+Repéré à nouveau lors d'un compte-rendu Superviseur (jamais transformé en ticket entre-temps), puis testé en conditions réelles avant correction. **Le scénario ne reproduit plus** : `queueEventForSync()` (STORY-66, livrée le 2026-08-20 pour une raison totalement différente — corriger une boucle d'erreurs 409 sur un match archivé rechargé puis modifié) appelle désormais `upsertMatchSnapshot()` directement et sans condition dès qu'un `S.currentMatchId` vide se voit régénérer un id — donc avant même que `matchRegisteredThisSession` n'entre en jeu. Vérifié empiriquement : flag forcé à `true` juste après un reset de `S.currentMatchId`, puis un événement réel enregistré — la ligne `matches` du nouveau match est bien créée et l'événement synchronise correctement malgré le flag périmé.
+
+`matchRegisteredThisSession` reste maintenant remis à `false` aux 3 points où `S.currentMatchId` est invalidé (`newMatch()`, `loadMatchAsCurrent()`, `switchTeamProfile()` — ce dernier partageait le même défaut, jamais mentionné dans l'audit d'origine) — un durcissement défensif documenté comme tel dans le code, pas un correctif d'un bug actif. Pas de story dédiée, pas de cycle QA/E2E complet : changement à risque nul, gardé sur décision explicite de Romain après explication du contexte.
