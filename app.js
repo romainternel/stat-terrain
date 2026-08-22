@@ -976,7 +976,9 @@ function recordTM(team){
     assistId:null, assistName:null, assistNumber:null, goalZone:null,
   });
   queueEventForSync(S.events[0]);
-  checkGkConsecutiveAlert(); checkTimeoutAdvisor(); R();
+  checkGkConsecutiveAlert(); checkTimeoutAdvisor();
+  stopTimer(); // le temps mort arrete reellement le chrono (STORY-70) — ce chemin (bouton timer) ne le faisait pas, contrairement a clickTeam()
+  R();
 }
 
 function clickActionMap(x,y){
