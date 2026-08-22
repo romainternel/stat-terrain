@@ -2686,15 +2686,17 @@ function courtSvgMarkup(){
   `;
 }
 
-// ═══ Zones de tir sur le terrain (bascule points/zones, STORY-43) ═══
-// Modele valide par Romain via un prototype visuel reel (8 iterations) avant
-// tout code applicatif — cf. docs/arch/zones-terrain-et-tableau-joueurs.md.
-// Classe un tir (x/y en %, meme repere que S.events[].x/.y) en zone de
-// depart sur le terrain. N'utilise le rayon 6m (R6) nulle part : le disque
-// des 6m est trop proche des poteaux pour qu'un point de touche y tombe
-// (poteau->touche = 148.75 > 105), donc la vraie frontiere de zone est R9
-// partout ; la ligne des 6m (deja tracee par courtSvgMarkup()) reste un pur
-// repere visuel, pas une frontiere.
+// ═══ Zones de tir sur le terrain (bascule points/zones, STORY-43, distinction
+// 6m/6-9m/9m ajoutee STORY-72) ═══
+// Modele de base (secteurs gauche/centre/droit + ailes) valide par Romain via
+// un prototype visuel reel (8 iterations) avant tout code applicatif — cf.
+// docs/arch/zones-terrain-et-tableau-joueurs.md. Jusqu'a STORY-72, le rayon
+// 6m (R6) n'etait utilise nulle part : la seule frontiere etait R9, donc tout
+// tir a moins de 9m etait etiquete "6m" (retour direct de Romain : un tir a
+// 8m comptabilise comme un tir a 6m). Desormais 3 bandes de profondeur par
+// secteur (6M*/69M*/9M*), les ailes (AILG/AILD) restant non subdivisees —
+// le rayon 6m n'atteint pas la ligne de touche dans cette zone (memes
+// limites geometriques que celles deja documentees pour R9 ci-dessous).
 // Portee des ailes, en unites viewBox (350x208) — constante partagee entre
 // shotZoneCourt() et buildCourtZones() pour eviter qu'elles divergent (deja
 // arrive une fois). Agrandie une 4e fois : des tirs reellement pres du corner
@@ -2703,41 +2705,56 @@ function courtSvgMarkup(){
 const COURT_WING_AY=80, COURT_WING_AX=100;
 function shotZoneCourt(xPct, yPct){
   const X=xPct/100*350, Y=yPct/100*208;
-  const postL=148.75, postR=201.25, R9=157.5;
+  const postL=148.75, postR=201.25, R6=105, R9=157.5;
   const AY=COURT_WING_AY, AX=COURT_WING_AX;
   const centerHalfW=postR-postL, splitL=175-centerHalfW, splitR=175+centerHalfW;
   if(Y<=0) return X<AX?"AILG":(X>350-AX?"AILD":"6MC");
   if(X<AX && Y < AY*(1-X/AX)) return "AILG";
   if(X>350-AX && Y < AY*(1-(350-X)/AX)) return "AILD";
   if(X>=splitL && X<=splitR){
-    let boundary;
-    if(X>=postL && X<=postR) boundary=R9;
-    else { const post=X<postL?postL:postR, dx=Math.abs(X-post); boundary=Math.sqrt(Math.max(0,R9*R9-dx*dx)); }
-    return Y<boundary ? "6MC" : "9MC";
+    let b6,b9;
+    if(X>=postL && X<=postR){ b6=R6; b9=R9; }
+    else { const post=X<postL?postL:postR, dx=Math.abs(X-post); b6=Math.sqrt(Math.max(0,R6*R6-dx*dx)); b9=Math.sqrt(Math.max(0,R9*R9-dx*dx)); }
+    if(Y<b6) return "6MC";
+    if(Y<b9) return "69MC";
+    return "9MC";
   }
   const post=X<splitL?postL:postR, dir=X<splitL?-1:1;
   const dx=Math.abs(X-post), r=Math.hypot(dx,Y);
-  if(r<R9) return dir<0?"6MG":"6MD";
+  if(r<R6) return dir<0?"6MG":"6MD";
+  if(r<R9) return dir<0?"69MG":"69MD";
   return dir<0?"9MG":"9MD";
 }
-const COURT_ZONE_ORDER=["AILG","6MG","6MC","6MD","AILD","9MG","9MC","9MD"];
+// Ordre de rendu (pas seulement d'agregation) : 6MG/6MC/6MD DOIVENT etre
+// dessines APRES 69MG/69MC/69MD — cf. buildCourtZones(), les polygones 69M*
+// cote aile (G/D) reutilisent tels quels les anciens polygones "6m" (bornes
+// par R9, jamais exactement par R6 a cause du triangle aile qui empiete sur
+// la frontiere R6 par endroits) : le petit polygone 6M* est dessine PAR-DESSUS
+// pour masquer visuellement la portion interieure, plutot que de calculer une
+// soustraction de polygones exacte. Cote centre (6MC/69MC), les deux bandes
+// sont geometriquement exactes et ne se chevauchent pas — l'ordre n'y a pas
+// d'importance, gardé identique pour la simplicite.
+const COURT_ZONE_ORDER=["AILG","AILD","69MG","9MG","69MC","9MC","69MD","9MD","6MG","6MC","6MD"];
 // Positions de texte pre-calculees par zone en % (pas le centroide brut, qui
-// tombe mal sur les zones en arc/concaves). 6mG/6mD deplaces entre les
-// lignes 6m et 9m (retour Romain, usage reel) ; 6mC volontairement laisse
-// entre 4m et 6m (rester "entre 6m/9m" le mettrait pile sur le marqueur 7m,
-// confusion directe) ; AILG/AILD/9m* inchanges.
+// tombe mal sur les zones en arc/concaves). 69mG/69mC/69mD reprennent les
+// positions historiques de 6mG/6mC/6mD (meme forme de polygone, cf. ci-dessus)
+// ; 6mG/6mC/6mD (nouvelle bande, plus proche du but) recoivent une position
+// dediee ; AILG/AILD/9m* inchanges. A ajuster visuellement si un premier rendu
+// reel montre un chevauchement, meme logique que l'ajustement deja fait pour
+// 6mG/6mD lors du cycle precedent.
 const COURT_ZONE_LABEL_POS={
   AILG:[5.1,7.7], AILD:[94.9,7.7],
-  "6MG":[26.3,58], "6MC":[50,41.8], "6MD":[73.7,58],
-  "9MG":[10,85.6], "9MC":[50,88], "9MD":[90,85.6]
+  "69MG":[26.3,58], "69MC":[50,41.8], "69MD":[73.7,58],
+  "9MG":[10,85.6], "9MC":[50,88], "9MD":[90,85.6],
+  "6MG":[24,16], "6MC":[50,19], "6MD":[76,16]
 };
 let _courtZonesCache=null;
-// Genere les 8 polygones de zone une seule fois (memoise — ne depend d'aucune
-// donnee de match), points en % (0-100), conversion vers viewBox (x3.5,
-// x2.08) faite au moment du rendu par renderCourtZones(), pas ici.
+// Genere les 11 polygones de zone une seule fois (memoise — ne depend
+// d'aucune donnee de match), points en % (0-100), conversion vers viewBox
+// (x3.5, x2.08) faite au moment du rendu par renderCourtZones(), pas ici.
 function buildCourtZones(){
   if(_courtZonesCache) return _courtZonesCache;
-  const VBW=350, postL=148.75, postR=201.25, R9=157.5;
+  const VBW=350, postL=148.75, postR=201.25, R6=105, R9=157.5;
   const AY=COURT_WING_AY, AX=COURT_WING_AX;
   const toPct=(X,Y)=>({x:X/VBW*100, y:Y/208*100});
   function arcPoints(post, dir, radius, angleFrom, angleTo, steps=24){
@@ -2753,17 +2770,52 @@ function buildCourtZones(){
   const farY=207; // ligne de touche basse deja tracee par courtSvgMarkup() a Y=207
   const centerHalfW=postR-postL, splitL=175-centerHalfW, splitR=175+centerHalfW;
   function angleAtX(post,X,radius){ return Math.acos(Math.abs(post-X)/radius)*180/Math.PI; }
-  const angleSplitL=angleAtX(postL,splitL,R9), angleSplitR=angleAtX(postR,splitR,R9);
-  const ySplit=R9*Math.sin(angleSplitL*Math.PI/180);
+  const angleSplitL9=angleAtX(postL,splitL,R9), angleSplitR9=angleAtX(postR,splitR,R9);
+  const ySplit9=R9*Math.sin(angleSplitL9*Math.PI/180);
+  const angleSplitL6=angleAtX(postL,splitL,R6), angleSplitR6=angleAtX(postR,splitR,R6);
+  const ySplit6=R6*Math.sin(angleSplitL6*Math.PI/180);
+  // L'arc R6 croise la diagonale du triangle d'aile avant d'atteindre la
+  // ligne de but (contrairement a R9, cf. angleSplitL6 vs le cas R9 ci-dessus)
+  // — recherche par bissection du point de croisement exact (pas de solution
+  // fermee simple), pour que 6MG/6MD (ci-dessous) ne debordent pas sur le
+  // territoire d'AILG/AILD. Cf. docs/risks/zones-tir-distance.md #1.
+  function wingArcCrossAngle(radius){
+    let lo=postL-radius, hi=AX;
+    for(let i=0;i<40;i++){
+      const mid=(lo+hi)/2, dx=postL-mid;
+      const b=Math.sqrt(Math.max(0,radius*radius-dx*dx));
+      const hyp=AY*(1-mid/AX);
+      if(hyp-b>0) lo=mid; else hi=mid;
+    }
+    return angleAtX(postL,(lo+hi)/2,radius);
+  }
+  const angleWingCross6=wingArcCrossAngle(R6);
   const z={};
   z.AILG=[toPct(0,0),toPct(0,AY),toPct(AX,0)];
   z.AILD=[toPct(VBW,0),toPct(VBW,AY),toPct(VBW-AX,0)];
-  z['6MG']=[toPct(AX,0),toPct(splitL,0),toPct(splitL,ySplit), ...arcPoints(postL,-1,R9,angleSplitL,touchAngle), toPct(0,AY)];
-  z['6MC']=[toPct(splitL,0),toPct(splitR,0), ...arcPoints(postR,1,R9,angleSplitR,90), toPct(postR,R9),toPct(postL,R9), ...arcPoints(postL,-1,R9,90,angleSplitL)];
-  z['6MD']=[toPct(VBW-AX,0),toPct(splitR,0),toPct(splitR,ySplit), ...arcPoints(postR,1,R9,angleSplitR,touchAngle), toPct(VBW,AY)];
-  z['9MG']=[toPct(0,touchY), ...arcPoints(postL,-1,R9,touchAngle,angleSplitL), toPct(splitL,farY),toPct(0,farY)];
-  z['9MC']=[toPct(splitL,ySplit), ...arcPoints(postL,-1,R9,angleSplitL,90), toPct(postL,R9),toPct(postR,R9), ...arcPoints(postR,1,R9,90,angleSplitR), toPct(splitR,ySplit),toPct(splitR,farY),toPct(splitL,farY)];
-  z['9MD']=[toPct(VBW,touchY), ...arcPoints(postR,1,R9,touchAngle,angleSplitR), toPct(splitR,farY),toPct(VBW,farY)];
+  // 69MG/69MD : formes historiques "6m" (STORY-43/91), inchangees — bornees
+  // par R9, jamais R6 (cf. commentaire ci-dessus). Reetiquetees, pas redessinees.
+  z['69MG']=[toPct(AX,0),toPct(splitL,0),toPct(splitL,ySplit9), ...arcPoints(postL,-1,R9,angleSplitL9,touchAngle), toPct(0,AY)];
+  z['69MD']=[toPct(VBW-AX,0),toPct(splitR,0),toPct(splitR,ySplit9), ...arcPoints(postR,1,R9,angleSplitR9,touchAngle), toPct(VBW,AY)];
+  z['9MG']=[toPct(0,touchY), ...arcPoints(postL,-1,R9,touchAngle,angleSplitL9), toPct(splitL,farY),toPct(0,farY)];
+  z['9MD']=[toPct(VBW,touchY), ...arcPoints(postR,1,R9,touchAngle,angleSplitR9), toPct(splitR,farY),toPct(VBW,farY)];
+  // 6MG/6MD (nouveau, STORY-72) : petit croissant borne par R6, dessine
+  // par-dessus 69MG/69MD (cf. COURT_ZONE_ORDER). L'arc s'arrete a
+  // angleWingCross6 (pas a l'angle 0/ligne de but) : au-dela, la vraie
+  // frontiere devient la diagonale du triangle d'aile, pas l'arc R6 — la
+  // fermeture implicite (dernier point -> premier point) trace cette
+  // diagonale exactement, puisqu'elle est deja une droite (aucune
+  // approximation introduite).
+  z['6MG']=[toPct(AX,0),toPct(splitL,0),toPct(splitL,ySplit6), ...arcPoints(postL,-1,R6,angleSplitL6,angleWingCross6)];
+  z['6MD']=[toPct(VBW-AX,0),toPct(splitR,0),toPct(splitR,ySplit6), ...arcPoints(postR,1,R6,angleSplitR6,angleWingCross6)];
+  // 6MC/69MC/9MC : couloir central, aucun chevauchement avec le triangle
+  // d'aile (splitL/splitR > AX/(VBW-AX)) — bandes exactes, pas besoin de
+  // superposition. 69MC = anneau entre R6 (interieur) et R9 (exterieur),
+  // trace interieur aller (gauche->droite) puis exterieur retour (droite->
+  // gauche), technique standard pour un polygone en anneau.
+  z['6MC']=[toPct(splitL,0),toPct(splitR,0), ...arcPoints(postR,1,R6,angleSplitR6,90), toPct(postR,R6),toPct(postL,R6), ...arcPoints(postL,-1,R6,90,angleSplitL6)];
+  z['69MC']=[toPct(splitL,ySplit6), ...arcPoints(postL,-1,R6,angleSplitL6,90), toPct(postL,R6),toPct(postR,R6), ...arcPoints(postR,1,R6,90,angleSplitR6), toPct(splitR,ySplit9), ...arcPoints(postR,1,R9,angleSplitR9,90), toPct(postR,R9),toPct(postL,R9), ...arcPoints(postL,-1,R9,90,angleSplitL9)];
+  z['9MC']=[toPct(splitL,ySplit9), ...arcPoints(postL,-1,R9,angleSplitL9,90), toPct(postL,R9),toPct(postR,R9), ...arcPoints(postR,1,R9,90,angleSplitR9), toPct(splitR,ySplit9),toPct(splitR,farY),toPct(splitL,farY)];
   _courtZonesCache=z;
   return z;
 }
