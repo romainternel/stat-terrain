@@ -815,6 +815,38 @@ function resetTimer(){ if(S.readOnly)return; stopTimer(); S.time=0; R();}
 function fmtTime(t){ const m=Math.floor(t/60),s=t%60; return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"); }
 function renderTimer(){ const el=document.getElementById("tmr"); if(el) el.textContent=fmtTime(S.time); }
 
+// Changement de mi-temps (STORY-71) — confirmation dans les deux sens, jamais
+// de bascule instantanee sur un clic accidentel. MT1->MT2 : chrono remis a 0
+// et relance automatiquement (demande explicite de Romain), plus rappel
+// gardiens (possibilite de changement a la pause). MT2->MT1 (clic accidentel) :
+// chrono restaure au dernier tag reellement enregistre en MT1 (pas 0, pas le
+// temps de MT2), et reste en pause — c'est une correction d'erreur, pas un
+// vrai debut de mi-temps, l'utilisateur relance manuellement quand il est pret.
+function switchPeriod(){
+  if(S.readOnly) return;
+  const wasP1=S.period===1;
+  if(wasP1){
+    if(!safeConfirm("La mi-temps 1 est-elle terminée ?\n\nLe chrono va repasser à 0:00 et redémarrer automatiquement en mi-temps 2.")) return;
+    stopTimer();
+    S.period=2;
+    S.time=0;
+    S.tmLastAlert=0; S.halfTimeLastAlert=0;
+    startTimer();
+    showToast("🧤 Pense à vérifier les gardiens pour la 2e mi-temps !", true);
+  } else {
+    const lastP1Evt=S.events.find(e=>(e.period||1)===1); // unshift-ordonne : le 1er match = le plus recent tag de MT1
+    const restoreTime=lastP1Evt?lastP1Evt.rawTime:1800; // 1800s = 30min, meme reference que checkHalfTimeReminder()
+    if(!safeConfirm(`Revenir à la mi-temps 1 ?\n\nLe chrono va reprendre à ${fmtTime(restoreTime)} et rester en pause.`)) return;
+    stopTimer();
+    S.period=1;
+    S.time=restoreTime;
+    S.tmLastAlert=0; S.halfTimeLastAlert=0;
+    upsertMatchSnapshot();
+    showToast(`↩ Retour à la mi-temps 1 — chrono en pause à ${fmtTime(restoreTime)}`);
+    R();
+  }
+}
+
 // ═══════════════════════════════════════════════════════
 // MATCH LOGIC
 // ═══════════════════════════════════════════════════════
@@ -4980,7 +5012,7 @@ function bind(){
   // Timer
   const tt=document.getElementById("t-toggle"); if(tt) tt.onclick=()=>S.running?stopTimer():startTimer();
   const tr=document.getElementById("t-reset"); if(tr) tr.onclick=resetTimer;
-  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=()=>{if(S.readOnly)return;const wasP1=S.period===1;S.period=wasP1?2:1;if(wasP1){stopTimer();S.time=0;}S.tmLastAlert=0;S.halfTimeLastAlert=0;upsertMatchSnapshot();R();};
+  const pb=document.getElementById("per-btn"); if(pb) pb.onclick=switchPeriod;
 
   // Actions
   document.querySelectorAll("[data-act]").forEach(el=>{ el.onclick=()=>selectAction(el.dataset.act); });
